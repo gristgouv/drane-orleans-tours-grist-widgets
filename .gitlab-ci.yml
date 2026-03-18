@@ -2,7 +2,7 @@ pages:
   stage: deploy
   script:
     - mkdir public
-    - cp index.html public/
+    - cp *.html public/        # copie tous tes .html
   artifacts:
     paths:
       - public
