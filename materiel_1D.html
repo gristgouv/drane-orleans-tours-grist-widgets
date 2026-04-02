@@ -195,64 +195,56 @@
     .color-warn { color: var(--warn); }
     .color-bad  { color: var(--bad);  }
 
-    /* ── Detail panel (expanded) ── */
-    .detail-panel {
+    /* ── Comparison table (expanded) ── */
+    .cmp-section {
       margin-top: 10px;
       padding-top: 10px;
       border-top: 1px solid var(--border);
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-      gap: 8px;
     }
-    .detail-item { }
-    .detail-item .di-label {
+    .cmp-title {
       font-size: 10px;
+      font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
-      letter-spacing: .4px;
+      letter-spacing: .5px;
+      margin-bottom: 6px;
     }
-    .detail-item .di-value {
+    .cmp-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .cmp-table thead th {
+      text-align: right;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 2px 6px 4px;
+    }
+    .cmp-table thead th:first-child { text-align: left; }
+    .cmp-lbl {
+      color: var(--muted);
+      font-size: 11px;
+      padding: 4px 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 110px;
+    }
+    .cmp-val {
       font-family: var(--mono);
-      font-size: 13px;
+      font-size: 12px;
+      text-align: right;
+      padding: 4px 6px;
       color: var(--text);
-      margin-top: 2px;
     }
-
-    /* ── Bar comparator ── */
-    .bar-section {
-      margin-top: 10px;
-    }
-    .bar-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 5px;
-    }
-    .bar-lbl {
+    .cmp-school-row .cmp-lbl { color: var(--text); font-weight: 600; }
+    .cmp-school-row .cmp-val { font-size: 13px; font-weight: 500; }
+    .cmp-sep td { height: 6px; }
+    .cmp-legend {
       font-size: 10px;
       color: var(--muted);
-      width: 80px;
-      flex-shrink: 0;
-    }
-    .bar-track {
-      flex: 1;
-      height: 6px;
-      background: var(--border);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-    .bar-fill {
-      height: 100%;
-      border-radius: 3px;
-      transition: width .4s ease;
-    }
-    .bar-num {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--muted);
-      width: 36px;
-      text-align: right;
-      flex-shrink: 0;
+      margin-top: 6px;
     }
 
     /* ── Empty states ── */
@@ -342,21 +334,30 @@
 
   function extractFields(rec) {
     return {
-      uai:          resolveField(rec, ['UAI','uai']),
-      nom:          resolveField(rec, ['Nom','nom','name']),
-      ville:        resolveField(rec, ['Ville','ville']),
-      dept:         resolveField(rec, ['D_partement__texte_','Département__texte_','departement','dept','Departement_texte_']),
-      nbEleves:     resolveField(rec, ['Nb_eleves','nb_eleves','Nb_Eleves']),
-      ratio:        resolveField(rec, ['ratio_ordinateur']),
-      moyDept:      resolveField(rec, ['Moy_depart_ratio_ordi']),
-      moyCommune:   resolveField(rec, ['Moy_commune_ratio_ordi']),
-      moyAcad:      resolveField(rec, ['Moy_acad_ratio_ordi']),
-      ratioTab:     resolveField(rec, ['ratio_tablette']),
-      moyDeptTab:   resolveField(rec, ['Moy_depart_ratio_tablette']),
-      pctProj:      resolveField(rec, ['pourcentage_equip_proj']),
-      moyDeptProj:  resolveField(rec, ['Moy_depart_pourcentage_equip_proj']),
-      moyAcadProj:  resolveField(rec, ['Moy_acad_pourcentage_equip_proj']),
-      moyCommProj:  resolveField(rec, ['Moy_commune_pourcentage_equip_proj']),
+      uai:            resolveField(rec, ['UAI','uai']),
+      nom:            resolveField(rec, ['Nom','nom','name']),
+      ville:          resolveField(rec, ['Ville','ville']),
+      dept:           resolveField(rec, ['D_partement__texte_','Département__texte_','departement','dept','Departement_texte_']),
+      circo:          resolveField(rec, ['LIB_CIRCO','lib_circo']),
+      nbEleves:       resolveField(rec, ['Nb_eleves','nb_eleves','Nb_Eleves']),
+      // Ordinateurs
+      ratio:          resolveField(rec, ['ratio_ordinateur']),
+      moyAcadOrdi:    resolveField(rec, ['Moy_acad_ratio_ordi']),
+      moyDeptOrdi:    resolveField(rec, ['Moy_depart_ratio_ordi']),
+      moyCircoOrdi:   resolveField(rec, ['Moy_circo_ratio_ordi']),
+      moyCommOrdi:    resolveField(rec, ['Moy_commune_ratio_ordi']),
+      // Tablettes
+      ratioTab:       resolveField(rec, ['ratio_tablette']),
+      moyAcadTab:     resolveField(rec, ['Moy_acad_ratio_tablette']),
+      moyDeptTab:     resolveField(rec, ['Moy_depart_ratio_tablette']),
+      moyCircoTab:    resolveField(rec, ['Moy_circo_ratio_tablette']),
+      moyCommTab:     resolveField(rec, ['Moy_commune_ratio_tablette']),
+      // Projection
+      pctProj:        resolveField(rec, ['pourcentage_equip_proj']),
+      moyAcadProj:    resolveField(rec, ['Moy_acad_pourcentage_equip_proj']),
+      moyDeptProj:    resolveField(rec, ['Moy_depart_pourcentage_equip_proj']),
+      moyCircoProj:   resolveField(rec, ['Moy_circo_pourcentage_equip_proj']),
+      moyCommProj:    resolveField(rec, ['Moy_commune_pourcentage_equip_proj']),
     };
   }
 
@@ -399,17 +400,14 @@
       const ratio    = parseFloat(f.ratio);
       const ratioTab = parseFloat(f.ratioTab);
       const pctProj  = parseFloat(f.pctProj);
-      const moyDept  = parseFloat(f.moyDept);
       const isExpanded = expandedId === id;
       const nomClean = String(f.nom ?? '').trim();
       const uaiStr   = String(f.uai ?? '').trim();
 
-      // "xx élèves pour 1 X"
       function elevesFor1(r) {
         const v = parseFloat(r);
         if (!v || isNaN(v) || v === 0) return null;
-        const n = Math.round(100 / v);
-        return n;
+        return Math.round(100 / v);
       }
 
       function metricTile(icon, label, value, colorClass, subLine) {
@@ -428,51 +426,55 @@
       const n1 = elevesFor1(ratio);
       const n2 = elevesFor1(ratioTab);
 
-      const tile1 = metricTile(
-        '💻', 'Ordinateurs',
-        ratio,
-        ratioColor(ratio, parseFloat(f.moyDept)),
-        n1 ? `${n1} élève${n1 > 1 ? 's' : ''} pour 1 ordi` : null
-      );
-      const tile2 = metricTile(
-        '📱', 'Tablettes',
-        ratioTab,
-        ratioColor(ratioTab, parseFloat(f.moyDeptTab)),
-        n2 ? `${n2} élève${n2 > 1 ? 's' : ''} pour 1 tablette` : null
-      );
-      const tile3 = metricTile(
-        '📽️', '% Projection',
-        isNaN(pctProj) ? null : pctProj,
-        ratioColor(pctProj, parseFloat(f.moyDeptProj)),
-        !isNaN(pctProj) ? `moy. dépt : ${fmt(f.moyDeptProj)}%` : null
-      );
+      const tile1 = metricTile('💻', 'Ordinateurs',  ratio,    ratioColor(ratio,    parseFloat(f.moyDeptOrdi)), n1 ? `${n1} élève${n1>1?'s':''} pour 1 ordi` : null);
+      const tile2 = metricTile('📱', 'Tablettes',    ratioTab, ratioColor(ratioTab, parseFloat(f.moyDeptTab)),  n2 ? `${n2} élève${n2>1?'s':''} pour 1 tablette` : null);
+      const tile3 = metricTile('📽️', '% Projection', isNaN(pctProj)?null:pctProj, ratioColor(pctProj, parseFloat(f.moyDeptProj)), !isNaN(pctProj) ? `moy. dépt : ${fmt(f.moyDeptProj)}%` : null);
 
-      const barMax = Math.max(ratio || 0, moyDept || 0, parseFloat(f.moyAcad) || 0, parseFloat(f.moyCommune) || 0, 1);
+      // ── Comparison table (expanded) ──
+      function cmpRow(label, vOrdi, vTab, vProj) {
+        return `
+          <tr>
+            <td class="cmp-lbl">${label}</td>
+            <td class="cmp-val">${fmt(vOrdi)}</td>
+            <td class="cmp-val">${fmt(vTab)}</td>
+            <td class="cmp-val">${fmt(vProj)}</td>
+          </tr>`;
+      }
+
+      const circoLabel = f.circo ? escHtml(String(f.circo)) : 'Circonscription';
+      const villeLabel = f.ville  ? escHtml(String(f.ville))  : 'Commune';
 
       const detailHtml = isExpanded ? `
-        <div class="detail-panel">
-          <div class="detail-item">
-            <div class="di-label">Nb élèves</div>
-            <div class="di-value">${fmt(f.nbEleves)}</div>
+        <div class="cmp-section">
+          <div class="cmp-title">Comparaison aux moyennes</div>
+          <table class="cmp-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>💻 Ordi</th>
+                <th>📱 Tablette</th>
+                <th>📽️ Proj.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="cmp-school-row">
+                <td class="cmp-lbl">Cette école</td>
+                <td class="cmp-val ${ratioColor(ratio,    parseFloat(f.moyDeptOrdi))}">${fmt(ratio)}</td>
+                <td class="cmp-val ${ratioColor(ratioTab, parseFloat(f.moyDeptTab))}">${fmt(ratioTab)}</td>
+                <td class="cmp-val ${ratioColor(pctProj,  parseFloat(f.moyDeptProj))}">${fmt(pctProj)}</td>
+              </tr>
+              <tr class="cmp-sep"><td colspan="4"></td></tr>
+              ${cmpRow('Académie',       f.moyAcadOrdi,  f.moyAcadTab,   f.moyAcadProj)}
+              ${cmpRow('Département',    f.moyDeptOrdi,  f.moyDeptTab,   f.moyDeptProj)}
+              ${cmpRow(circoLabel,       f.moyCircoOrdi, f.moyCircoTab,  f.moyCircoProj)}
+              ${cmpRow(villeLabel,       f.moyCommOrdi,  f.moyCommTab,   f.moyCommProj)}
+            </tbody>
+          </table>
+          <div class="cmp-legend">
+            <span class="color-good">■</span> au-dessus de la moy. dépt &nbsp;
+            <span class="color-warn">■</span> proche &nbsp;
+            <span class="color-bad">■</span> en-dessous
           </div>
-          <div class="detail-item">
-            <div class="di-label">Moy. académie (ordi)</div>
-            <div class="di-value">${fmt(f.moyAcad)}</div>
-          </div>
-          <div class="detail-item">
-            <div class="di-label">Moy. département (ordi)</div>
-            <div class="di-value">${fmt(f.moyDept)}</div>
-          </div>
-          <div class="detail-item">
-            <div class="di-label">Moy. commune (ordi)</div>
-            <div class="di-value">${fmt(f.moyCommune)}</div>
-          </div>
-        </div>
-        <div class="bar-section">
-          ${barRow('Cette école',  ratio,           barMax, '#2563eb')}
-          ${barRow('Moy. commune', f.moyCommune,    barMax, '#7c3aed')}
-          ${barRow('Moy. dépt',    f.moyDept,       barMax, '#0891b2')}
-          ${barRow('Moy. acad.',   f.moyAcad,       barMax, '#64748b')}
         </div>
       ` : '';
 
@@ -485,6 +487,7 @@
                 <span class="tag-uai">${escHtml(uaiStr)}</span>
                 <span>${escHtml(String(f.ville ?? ''))}</span>
                 ${f.dept ? `<span>${escHtml(String(f.dept))}</span>` : ''}
+                ${f.circo ? `<span>${escHtml(String(f.circo))}</span>` : ''}
               </div>
             </div>
           </div>
@@ -505,18 +508,6 @@
     });
   }
 
-  function barRow(label, value, max, color) {
-    const v = parseFloat(value);
-    if (isNaN(v)) return '';
-    const pct = Math.min(100, (v / max) * 100).toFixed(1);
-    return `
-      <div class="bar-row">
-        <span class="bar-lbl">${label}</span>
-        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
-        <span class="bar-num">${fmt(v)}</span>
-      </div>`;
-  }
-
   /* ── Grist integration ── */
   document.getElementById('searchInput').addEventListener('input', e => {
     expandedId = null;
@@ -535,9 +526,21 @@
     // Développement hors Grist : données fictives
     document.getElementById('status').textContent = 'Mode démo (hors Grist)';
     allRecords = [
-      { id: 1, UAI: '0280576Z', Nom: ' Ecole primaire Charlemagne - Saint-Martin-de-Nigelles', Ville: 'ST MARTIN DE NIGELLES', ratio_ordinateur: 4.0,  Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 4.0,  Nb_eleves: 130, ratio_tablette: 25.0, Moy_depart_ratio_tablette: 17.0, pourcentage_equip_proj: 100.0, Moy_depart_pourcentage_equip_proj: 93.0 },
-      { id: 2, UAI: '0280580D', Nom: ' Ecole primaire - Villiers-le-Morhier',                  Ville: 'VILLIERS LE MORHIER',   ratio_ordinateur: 33.0, Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 33.0, Nb_eleves: 126, ratio_tablette: 0.0,  Moy_depart_ratio_tablette: 17.0, pourcentage_equip_proj: 120.0, Moy_depart_pourcentage_equip_proj: 93.0 },
-      { id: 3, UAI: '0280910M', Nom: ' Ecole élémentaire Emile Pottier - Gallardon',           Ville: 'GALLARDON',            ratio_ordinateur: 4.0,  Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 4.0,  Nb_eleves: 197, ratio_tablette: 7.0,  Moy_depart_ratio_tablette: 17.0, pourcentage_equip_proj: 100.0, Moy_depart_pourcentage_equip_proj: 93.0 },
+      { id: 1, UAI: '0280576Z', Nom: ' Ecole primaire Charlemagne - Saint-Martin-de-Nigelles', Ville: 'ST MARTIN DE NIGELLES', LIB_CIRCO: 'IEN CHARTRES 4',
+        ratio_ordinateur: 4.0,  Moy_acad_ratio_ordi: 16.0, Moy_depart_ratio_ordi: 17.0, Moy_circo_ratio_ordi: 14.0, Moy_commune_ratio_ordi: 4.0,
+        ratio_tablette: 25.0,   Moy_acad_ratio_tablette: 18.0, Moy_depart_ratio_tablette: 17.0, Moy_circo_ratio_tablette: 20.0, Moy_commune_ratio_tablette: 25.0,
+        pourcentage_equip_proj: 100.0, Moy_acad_pourcentage_equip_proj: 88.0, Moy_depart_pourcentage_equip_proj: 93.0, Moy_circo_pourcentage_equip_proj: 84.0, Moy_commune_pourcentage_equip_proj: 100.0,
+        Nb_eleves: 130 },
+      { id: 2, UAI: '0280580D', Nom: ' Ecole primaire - Villiers-le-Morhier', Ville: 'VILLIERS LE MORHIER', LIB_CIRCO: 'IEN CHARTRES 4',
+        ratio_ordinateur: 33.0, Moy_acad_ratio_ordi: 16.0, Moy_depart_ratio_ordi: 17.0, Moy_circo_ratio_ordi: 14.0, Moy_commune_ratio_ordi: 33.0,
+        ratio_tablette: 0.0,    Moy_acad_ratio_tablette: 18.0, Moy_depart_ratio_tablette: 17.0, Moy_circo_ratio_tablette: 20.0, Moy_commune_ratio_tablette: 0.0,
+        pourcentage_equip_proj: 120.0, Moy_acad_pourcentage_equip_proj: 88.0, Moy_depart_pourcentage_equip_proj: 93.0, Moy_circo_pourcentage_equip_proj: 84.0, Moy_commune_pourcentage_equip_proj: 120.0,
+        Nb_eleves: 126 },
+      { id: 3, UAI: '0280910M', Nom: ' Ecole élémentaire Emile Pottier - Gallardon', Ville: 'GALLARDON', LIB_CIRCO: 'IEN CHARTRES 4',
+        ratio_ordinateur: 4.0,  Moy_acad_ratio_ordi: 16.0, Moy_depart_ratio_ordi: 17.0, Moy_circo_ratio_ordi: 14.0, Moy_commune_ratio_ordi: 4.0,
+        ratio_tablette: 7.0,    Moy_acad_ratio_tablette: 18.0, Moy_depart_ratio_tablette: 17.0, Moy_circo_ratio_tablette: 20.0, Moy_commune_ratio_tablette: 7.0,
+        pourcentage_equip_proj: 100.0, Moy_acad_pourcentage_equip_proj: 88.0, Moy_depart_pourcentage_equip_proj: 93.0, Moy_circo_pourcentage_equip_proj: 84.0, Moy_commune_pourcentage_equip_proj: 100.0,
+        Nb_eleves: 197 },
     ];
     render('');
   }
