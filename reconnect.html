@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reconnect – Indicateurs</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --good:    #16a34a;
+      --warn:    #d97706;
+      --bad:     #dc2626;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --mono:    'DM Mono', monospace;
+      --sans:    'DM Sans', sans-serif;
+      --r:       10px;
+      --p1-bg:   #fef2f2; --p1-c: #b91c1c;
+      --p2-bg:   #fff7ed; --p2-c: #c2410c;
+      --p3-bg:   #f0fdf4; --p3-c: #166534;
+    }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); padding: 16px; font-size: 13px; }
+
+    /* ── Header ── */
+    .header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .header-icon {
+      width: 36px; height: 36px; background: var(--accent);
+      border-radius: 8px; display: grid; place-items: center; flex-shrink: 0;
+    }
+    .header-icon svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .header h1 { font-size: 15px; font-weight: 700; }
+    .header p  { font-size: 11px; color: var(--muted); }
+
+    /* ── Toggle ── */
+    .toggle-row { display: flex; gap: 6px; margin-bottom: 12px; }
+    .toggle-btn {
+      flex: 1; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px;
+      background: var(--surface); font-family: var(--sans); font-size: 12px;
+      font-weight: 500; color: var(--muted); cursor: pointer; transition: all .15s;
+    }
+    .toggle-btn.active { border-color: var(--accent); background: var(--aclt); color: var(--accent); }
+
+    /* ── Search ── */
+    .search-wrap { position: relative; margin-bottom: 10px; }
+    .search-wrap svg {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      width: 16px; height: 16px; stroke: var(--muted); fill: none;
+      stroke-width: 2; stroke-linecap: round; pointer-events: none;
+    }
+    #searchInput {
+      width: 100%; padding: 10px 12px 10px 38px;
+      border: 1.5px solid var(--border); border-radius: var(--r);
+      font-family: var(--sans); font-size: 13px; background: var(--surface);
+      color: var(--text); outline: none; transition: border-color .15s;
+    }
+    #searchInput:focus { border-color: var(--accent); }
+    #searchInput::placeholder { color: var(--muted); }
+
+    /* ── Status ── */
+    #status { font-size: 11px; color: var(--muted); margin-bottom: 8px; min-height: 16px; }
+
+    /* ── Table wrapper (mode école) ── */
+    .table-wrap { overflow-x: auto; border-radius: var(--r); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); }
+    thead th {
+      background: var(--bg); padding: 10px 12px;
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .5px;
+      border-bottom: 1px solid var(--border); text-align: left;
+      white-space: nowrap; position: sticky; top: 0; z-index: 2;
+    }
+    thead th.num { text-align: right; }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #f8faff; }
+    tbody td { padding: 10px 12px; vertical-align: middle; }
+
+    /* ── ID cell ── */
+    .cell-id { min-width: 180px; }
+    .ecole-name { font-weight: 600; font-size: 12px; }
+    .ecole-sub  { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .tag-uai {
+      font-family: var(--mono); font-size: 9px;
+      background: var(--aclt); color: var(--accent);
+      border-radius: 3px; padding: 1px 4px;
+    }
+    .college-ref { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    /* ── Reconnect badge ── */
+    .badge { display: inline-block; font-size: 10px; font-weight: 600; border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
+    .badge-p1 { background: var(--p1-bg); color: var(--p1-c); }
+    .badge-p2 { background: var(--p2-bg); color: var(--p2-c); }
+    .badge-p3 { background: var(--p3-bg); color: var(--p3-c); }
+
+    /* ── Indicator cell ── */
+    .cell-ind { min-width: 130px; text-align: right; }
+    .ind-val  { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+    .ind-diff {
+      font-size: 10px; margin-top: 1px;
+      display: flex; justify-content: flex-end; align-items: center; gap: 3px;
+    }
+    .ind-diff .arrow { font-size: 9px; }
+    .diff-good { color: var(--good); }
+    .diff-bad  { color: var(--bad);  }
+    .diff-neu  { color: var(--muted); }
+    .mini-bar-wrap { margin-top: 4px; width: 100%; height: 4px; background: var(--border); border-radius: 2px; }
+    .mini-bar-fill { height: 100%; border-radius: 2px; }
+
+    /* ── Footer moyenne globale ── */
+    tfoot tr { background: #f0f4ff; border-top: 2px solid var(--border); }
+    tfoot td { padding: 8px 12px; font-size: 11px; }
+    .avg-label { font-weight: 700; color: var(--accent); font-size: 11px; }
+    .avg-val { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--accent); text-align: right; }
+    .avg-sub { font-size: 9px; color: var(--muted); margin-top: 1px; text-align: right; }
+
+    /* ── Mode Collège : carte collège ── */
+    #container.mode-college { display: flex; flex-direction: column; gap: 12px; }
+
+    .college-card {
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+    }
+    .college-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 10px; padding: 12px 14px; background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .college-header-left { flex: 1; min-width: 0; }
+    .college-title { font-weight: 700; font-size: 14px; }
+    .college-meta  { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .college-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+
+    /* ── Moyenne collège : ligne dans le tableau ── */
+    tr.moy-college-row { background: #eff6ff; border-top: 1px dashed #bfdbfe; }
+    tr.moy-college-row td { font-size: 11px; padding: 7px 12px; }
+    tr.moy-college-row .avg-college-label { font-weight: 600; color: var(--accent); font-size: 11px; }
+
+    /* ── Empty ── */
+    .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .empty svg { width: 36px; height: 36px; stroke: var(--border); fill: none; stroke-width: 1.5; margin-bottom: 8px; }
+
+    mark { background: var(--aclt); color: var(--accent); border-radius: 2px; padding: 0 1px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">
+    <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+  </div>
+  <div>
+    <h1>Reconnect – Indicateurs</h1>
+    <p id="headerSub">Rechercher une école ou un collège</p>
+  </div>
+</div>
+
+<div class="toggle-row">
+  <button class="toggle-btn active" id="btnEcoles"  onclick="switchMode('ecoles')">🏫 Écoles</button>
+  <button class="toggle-btn"        id="btnColleges" onclick="switchMode('colleges')">🏛️ Collèges</button>
+</div>
+
+<div class="search-wrap">
+  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+  <input id="searchInput" type="text" placeholder="Nom d'école, de collège ou UAI…" autocomplete="off" />
+</div>
+
+<div id="status">En attente des données Grist…</div>
+<div id="container"></div>
+
+<script>
+  let allRecords = [];
+  let mode = 'ecoles';
+  let STATS = { ordi:{}, ips:{}, reussite:{}, connexion:{} };
+
+  /* ════ COLONNES ════ */
+  const UAI_C    = ['UAI_college'];
+  const NOM_C    = ['Nom_du_coll_ge_associ_','Nom du collège associé','Nom_du_college_associe','Nom_du_College_associe'];
+  const UAI_E    = ['UAI_ecole'];
+  const NOM_E    = ['Appellation_officielle__cole','Appellation officielle école','Appellation_officielle_ecole'];
+  const ORDI     = ['Indicateur_ordinateurs','Indicateur ordinateurs','indicateur_ordinateurs','indicateur ordinateurs'];
+  const IPS      = ['IPS_moyen_CM2','IPS moyen CM2'];
+  const REUSSITE = ['moyenne_reussite','Moyenne_reussite'];
+  const CONNEXION= ['indicateur_de_connexion','indicateur de connexion','Indicateur_de_connexion','Indicateur de connexion'];
+  const RECONNECT= ['Reconnect','reconnect'];
+  const RESOLVE = (rec, keys) => { for (const k of keys) if (rec[k] !== undefined) return rec[k]; return undefined; };
+
+  function fld(rec, keys) {
+    const v = RESOLVE(rec, keys);
+    if (v === undefined || v === null || String(v).trim() === '') return null;
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  }
+  function str(rec, keys) {
+    const v = RESOLVE(rec, keys);
+    return (v === undefined || v === null) ? '' : String(v).trim();
+  }
+
+  /* ════ STATS ════ */
+  function computeStats() {
+    const get = arr => {
+      const v = arr.filter(x => x !== null);
+      if (!v.length) return { mean:null, min:null, max:null, n:0 };
+      const mean = v.reduce((a,b)=>a+b,0)/v.length;
+      return { mean, min:Math.min(...v), max:Math.max(...v), n:v.length };
+    };
+    STATS.ordi      = get(allRecords.map(r => fld(r, ORDI)));
+    STATS.ips       = get(allRecords.map(r => fld(r, IPS)));
+    STATS.reussite  = get(allRecords.map(r => fld(r, REUSSITE)));
+    STATS.connexion = get(allRecords.map(r => fld(r, CONNEXION)));
+  }
+
+  /* ════ HELPERS ════ */
+  const norm    = s => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtNum  = (v, dec=2) => v === null ? '—' : Number(v).toFixed(dec);
+
+  function highlight(text, query) {
+    if (!query) return escHtml(text);
+    const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+    return escHtml(text).replace(re, '<mark>$1</mark>');
+  }
+
+  const HIGHER_BETTER = { ordi:true, ips:null, reussite:true, connexion:true };
+
+  function diffClass(val, mean, key) {
+    if (val===null || mean===null) return 'diff-neu';
+    const dir = HIGHER_BETTER[key];
+    if (dir===null) return 'diff-neu';
+    if (Math.abs(val-mean) < Math.abs(mean)*0.05) return 'diff-neu';
+    return (dir ? val>mean : val<mean) ? 'diff-good' : 'diff-bad';
+  }
+  function diffArrow(val, mean, key) {
+    if (val===null || mean===null) return '';
+    const dir = HIGHER_BETTER[key];
+    if (dir===null) return '';
+    if (Math.abs(val-mean) < Math.abs(mean)*0.05) return '→';
+    return val>mean ? '▲' : '▼';
+  }
+  function barPct(val, min, max) {
+    if (val===null||min===null||max===null||max===min) return 0;
+    return Math.max(0, Math.min(100, ((val-min)/(max-min))*100));
+  }
+  function barColor(cls) {
+    if (cls==='diff-good') return '#16a34a';
+    if (cls==='diff-bad')  return '#dc2626';
+    return '#94a3b8';
+  }
+
+  function reconnectBadge(val) {
+    if (!val) return '';
+    if (norm(val).includes('tres') || norm(val).includes('très'))
+      return `<span class="badge badge-p1">🔴 ${escHtml(val)}</span>`;
+    if (norm(val).includes('moins'))
+      return `<span class="badge badge-p3">🟢 ${escHtml(val)}</span>`;
+    return `<span class="badge badge-p2">🟡 ${escHtml(val)}</span>`;
+  }
+
+  /* ════ CELLULE INDICATEUR ════ */
+  function indCell(val, statKey, dec, refMean) {
+    // refMean : moyenne de référence (globale ou collège)
+    const mean = refMean !== undefined ? refMean : STATS[statKey].mean;
+    const s    = STATS[statKey];
+    const cls  = diffClass(val, mean, statKey);
+    const arr  = diffArrow(val, mean, statKey);
+    const pct  = barPct(val, s.min, s.max);
+    const diff = (val!==null && mean!==null) ? (val-mean) : null;
+    const diffStr = diff!==null ? `${diff>=0?'+':''}${diff.toFixed(dec)} vs moy.` : '';
+    return `<td class="cell-ind">
+      <div class="ind-val">${fmtNum(val,dec)}</div>
+      <div class="ind-diff ${cls}"><span class="arrow">${arr}</span><span>${diffStr}</span></div>
+      <div class="mini-bar-wrap"><div class="mini-bar-fill" style="width:${pct}%;background:${barColor(cls)}"></div></div>
+    </td>`;
+  }
+
+  /* ════ EN-TÊTE DE TABLEAU ════ */
+  function tableHead() {
+    const s = STATS;
+    return `<thead><tr>
+      <th>École · Collège · Priorité</th>
+      <th class="num">💻 Ind. ordinateurs<br><span style="font-weight:400;text-transform:none;font-size:9px">moy. glob. ${fmtNum(s.ordi.mean,2)} · n=${s.ordi.n}</span></th>
+      <th class="num">📊 IPS moyen CM2<br><span style="font-weight:400;text-transform:none;font-size:9px">moy. glob. ${fmtNum(s.ips.mean,1)} · n=${s.ips.n}</span></th>
+      <th class="num">✅ Moy. réussite CM2<br><span style="font-weight:400;text-transform:none;font-size:9px">moy. glob. ${fmtNum(s.reussite.mean,2)} · n=${s.reussite.n}</span></th>
+      <th class="num">📶 Ind. connexion<br><span style="font-weight:400;text-transform:none;font-size:9px">moy. glob. ${fmtNum(s.connexion.mean,1)} · n=${s.connexion.n}</span></th>
+    </tr></thead>`;
+  }
+
+  /* ════ LIGNE ÉCOLE ════ */
+  function ecoleRow(rec, query, showCollege) {
+    const nomE  = str(rec, NOM_E);
+    const uaiE  = str(rec, UAI_E);
+    const nomC  = str(rec, NOM_C);
+    const reconn= str(rec, RECONNECT);
+    return `<tr>
+      <td class="cell-id">
+        <div class="ecole-name">${highlight(nomE||'—', query)}</div>
+        <div class="ecole-sub"><span class="tag-uai">${escHtml(uaiE)}</span></div>
+        ${showCollege ? `<div class="college-ref">🏛️ ${highlight(nomC||'—', query)}</div>` : ''}
+        <div style="margin-top:4px">${reconnectBadge(reconn)}</div>
+      </td>
+      ${indCell(fld(rec,ORDI),     'ordi',      2)}
+      ${indCell(fld(rec,IPS),      'ips',       1)}
+      ${indCell(fld(rec,REUSSITE), 'reussite',  2)}
+      ${indCell(fld(rec,CONNEXION),'connexion', 1)}
+    </tr>`;
+  }
+
+  /* ════ LIGNE MOYENNE D'UN GROUPE ════ */
+  function moyRow(label, records) {
+    const avg = keys => {
+      const vals = records.map(r=>fld(r,keys)).filter(v=>v!==null);
+      return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    };
+    const mOrdi = avg(ORDI), mIps = avg(IPS), mReus = avg(REUSSITE), mConn = avg(CONNEXION);
+    // Pour la moyenne du collège, on compare à la moy. globale
+    return `<tr class="moy-college-row">
+      <td><span class="avg-college-label">${escHtml(label)}</span><br>
+          <span style="font-size:9px;color:var(--muted)">${records.length} école${records.length>1?'s':''}</span></td>
+      ${indCell(mOrdi, 'ordi',      2, STATS.ordi.mean)}
+      ${indCell(mIps,  'ips',       1, STATS.ips.mean)}
+      ${indCell(mReus, 'reussite',  2, STATS.reussite.mean)}
+      ${indCell(mConn, 'connexion', 1, STATS.connexion.mean)}
+    </tr>`;
+  }
+
+  /* ════ LIGNE MOYENNE GLOBALE (tfoot) ════ */
+  function globalTfoot() {
+    const s = STATS;
+    return `<tfoot><tr>
+      <td><span class="avg-label">Moyennes globales</span><br>
+          <span style="font-size:9px;color:var(--muted)">${allRecords.length} écoles au total</span></td>
+      <td><div class="avg-val">${fmtNum(s.ordi.mean,2)}</div><div class="avg-sub">min ${fmtNum(s.ordi.min,2)} · max ${fmtNum(s.ordi.max,2)}</div></td>
+      <td><div class="avg-val">${fmtNum(s.ips.mean,1)}</div><div class="avg-sub">min ${fmtNum(s.ips.min,1)} · max ${fmtNum(s.ips.max,1)}</div></td>
+      <td><div class="avg-val">${fmtNum(s.reussite.mean,2)}</div><div class="avg-sub">min ${fmtNum(s.reussite.min,2)} · max ${fmtNum(s.reussite.max,2)}</div></td>
+      <td><div class="avg-val">${fmtNum(s.connexion.mean,1)}</div><div class="avg-sub">min ${fmtNum(s.connexion.min,1)} · max ${fmtNum(s.connexion.max,1)}</div></td>
+    </tr></tfoot>`;
+  }
+
+  /* ════ RENDER MODE ÉCOLES ════ */
+  function renderEcoles(query) {
+    const q = norm(query.trim());
+    const container = document.getElementById('container');
+    container.className = '';
+
+    if (q === '') {
+      document.getElementById('status').textContent = `${allRecords.length} enregistrements • tapez pour rechercher`;
+      container.innerHTML = emptyPrompt('Entrez le nom d\'une école ou d\'un collège');
+      return;
+    }
+
+    const filtered = allRecords.filter(r => {
+      return norm(str(r,NOM_E)).includes(q) || norm(str(r,NOM_C)).includes(q)
+          || norm(str(r,UAI_E)).includes(q) || norm(str(r,UAI_C)).includes(q);
+    }).slice(0, 100);
+
+    document.getElementById('status').textContent =
+      `${filtered.length} résultat${filtered.length!==1?'s':''} pour « ${query} »`;
+
+    if (!filtered.length) { container.innerHTML = emptyPrompt('Aucun résultat trouvé'); return; }
+
+    const rows = filtered.map(r => ecoleRow(r, query, true)).join('');
+    container.innerHTML = `<div class="table-wrap"><table>
+      ${tableHead()}<tbody>${rows}</tbody>${globalTfoot()}
+    </table></div>`;
+  }
+
+  /* ════ RENDER MODE COLLÈGES ════ */
+  function renderColleges(query) {
+    const q = norm(query.trim());
+    const container = document.getElementById('container');
+    container.className = 'mode-college';
+
+    // Grouper par collège
+    const collegeMap = new Map();
+    for (const rec of allRecords) {
+      const uaiC = str(rec, UAI_C);
+      const nomC = str(rec, NOM_C);
+      if (!uaiC) continue;
+      if (!collegeMap.has(uaiC)) {
+        collegeMap.set(uaiC, { uaiC, nomC, ecoles: [] });
+      }
+      collegeMap.get(uaiC).ecoles.push(rec);
+    }
+
+    if (q === '') {
+      document.getElementById('status').textContent =
+        `${collegeMap.size} collèges • tapez pour rechercher`;
+      container.innerHTML = emptyPrompt('Entrez le nom d\'un collège ou son UAI');
+      return;
+    }
+
+    const filtered = Array.from(collegeMap.values()).filter(c =>
+      norm(c.nomC).includes(q) || norm(c.uaiC).includes(q)
+    );
+
+    document.getElementById('status').textContent =
+      `${filtered.length} collège${filtered.length!==1?'s':''} pour « ${query} »`;
+
+    if (!filtered.length) { container.innerHTML = emptyPrompt('Aucun collège trouvé'); return; }
+
+    container.innerHTML = filtered.map(c => {
+      // Comptage badges Reconnect
+      const counts = { p1:0, p2:0, p3:0 };
+      for (const r of c.ecoles) {
+        const rc = norm(str(r, RECONNECT));
+        if (rc.includes('tres')||rc.includes('très')) counts.p1++;
+        else if (rc.includes('moins')) counts.p3++;
+        else counts.p2++;
+      }
+
+      const badgeSummary = [
+        counts.p1 ? `<span class="badge badge-p1">🔴 ×${counts.p1}</span>` : '',
+        counts.p2 ? `<span class="badge badge-p2">🟡 ×${counts.p2}</span>` : '',
+        counts.p3 ? `<span class="badge badge-p3">🟢 ×${counts.p3}</span>` : '',
+      ].filter(Boolean).join('');
+
+      const ecoleRows = c.ecoles.map(r => ecoleRow(r, query, false)).join('');
+      const avgRow    = moyRow(`Moyenne du collège`, c.ecoles);
+
+      return `<div class="college-card">
+        <div class="college-header">
+          <div class="college-header-left">
+            <div class="college-title">${highlight(c.nomC||'—', query)}</div>
+            <div class="college-meta">
+              <span class="tag-uai">${escHtml(c.uaiC)}</span>
+              <span>${c.ecoles.length} école${c.ecoles.length>1?'s':''} associée${c.ecoles.length>1?'s':''}</span>
+            </div>
+          </div>
+          <div class="college-badges">${badgeSummary}</div>
+        </div>
+        <div class="table-wrap" style="border:none;border-radius:0">
+          <table>
+            ${tableHead()}
+            <tbody>${ecoleRows}${avgRow}</tbody>
+            ${globalTfoot()}
+          </table>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  /* ════ DISPATCH ════ */
+  function render(query) {
+    if (mode === 'ecoles') renderEcoles(query);
+    else                   renderColleges(query);
+  }
+
+  function switchMode(m) {
+    mode = m;
+    document.getElementById('btnEcoles').classList.toggle('active',  m==='ecoles');
+    document.getElementById('btnColleges').classList.toggle('active', m==='colleges');
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchInput').placeholder =
+      m==='ecoles' ? 'Nom d\'école, de collège ou UAI…' : 'Nom de collège ou UAI…';
+    document.getElementById('headerSub').textContent =
+      m==='ecoles' ? 'Rechercher une école' : 'Rechercher un collège';
+    render('');
+  }
+
+  function emptyPrompt(msg) {
+    return `<div class="empty">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <p>${escHtml(msg)}</p></div>`;
+  }
+
+  /* ════ GRIST ════ */
+  document.getElementById('searchInput').addEventListener('input', e => render(e.target.value));
+
+  if (typeof grist !== 'undefined') {
+    grist.ready({ requiredAccess: 'read table' });
+    grist.onRecords(records => {
+      allRecords = records;
+      computeStats();
+      document.getElementById('headerSub').textContent = `${records.length} établissements chargés`;
+      render(document.getElementById('searchInput').value);
+    });
+  } else {
+    // ── Démo ──
+    allRecords = [
+      { UAI_college:'0410793P','Nom du collège associé':'  LEONARD DE VINCI',    UAI_ecole:'0410373H','Appellation officielle école':'Ecole élémentaire Louise de Savoie', 'Indicateur ordinateurs':'',     'IPS moyen CM2':'84.21',moyenne_reussite:'',                    'indicateur de connexion':'32.18',Reconnect:'Besoin très prioritaire'  },
+      { UAI_college:'0280918W','Nom du collège associé':'  ANATOLE FRANCE',      UAI_ecole:'0280070Z','Appellation officielle école':'Ecole élémentaire Jean Macé',          'Indicateur ordinateurs':'0.11', 'IPS moyen CM2':'75.51',moyenne_reussite:'1.76',               'indicateur de connexion':'1.0',  Reconnect:'Besoin très prioritaire'  },
+      { UAI_college:'0280783F','Nom du collège associé':'  JEAN MOULIN',         UAI_ecole:'0280127D','Appellation officielle école':'Ecole élémentaire Marcel Proust',        'Indicateur ordinateurs':'0.04', 'IPS moyen CM2':'83.87',moyenne_reussite:'2.06',               'indicateur de connexion':'',     Reconnect:'Besoin prioritaire'       },
+      { UAI_college:'0280018B','Nom du collège associé':'  JEHAN DE BEAUCE',     UAI_ecole:'0280217Z','Appellation officielle école':'Ecole élémentaire Rabelais',             'Indicateur ordinateurs':'0.04', 'IPS moyen CM2':'78.62',moyenne_reussite:'1.97',               'indicateur de connexion':'37.28',Reconnect:'Besoin prioritaire'       },
+      { UAI_college:'0410718J','Nom du collège associé':'  JEAN DE LA FONTAINE', UAI_ecole:'0410047N','Appellation officielle école':'Ecole élémentaire Victor Hugo',           'Indicateur ordinateurs':'0.04', 'IPS moyen CM2':'66.41',moyenne_reussite:'2.10',               'indicateur de connexion':'',     Reconnect:'Besoin moins prioritaire' },
+      { UAI_college:'0410718J','Nom du collège associé':'  JEAN DE LA FONTAINE', UAI_ecole:'0410048P','Appellation officielle école':'Ecole élémentaire Jules Ferry',           'Indicateur ordinateurs':'0.21', 'IPS moyen CM2':'88.10',moyenne_reussite:'2.44',               'indicateur de connexion':'18.5', Reconnect:'Besoin moins prioritaire' },
+      { UAI_college:'0410718J','Nom du collège associé':'  JEAN DE LA FONTAINE', UAI_ecole:'0410049Q','Appellation officielle école':'Ecole élémentaire Pasteur',              'Indicateur ordinateurs':'0.09', 'IPS moyen CM2':'79.30',moyenne_reussite:'2.18',               'indicateur de connexion':'22.0', Reconnect:'Besoin prioritaire'       },
+      { UAI_college:'0280783F','Nom du collège associé':'  JEAN MOULIN',         UAI_ecole:'0280129F','Appellation officielle école':'Ecole élémentaire Paul Bert',             'Indicateur ordinateurs':'0.15', 'IPS moyen CM2':'91.20',moyenne_reussite:'2.61',               'indicateur de connexion':'25.0', Reconnect:'Besoin prioritaire'       },
+      { UAI_college:'0410150B','Nom du collège associé':'  PIERRE ET MARIE CURIE',UAI_ecole:'0410200H','Appellation officielle école':'Ecole élémentaire Ampère',              'Indicateur ordinateurs':'0.08', 'IPS moyen CM2':'72.30',moyenne_reussite:'1.90',               'indicateur de connexion':'42.0', Reconnect:'Besoin très prioritaire'  },
+      { UAI_college:'0410150B','Nom du collège associé':'  PIERRE ET MARIE CURIE',UAI_ecole:'0410201J','Appellation officielle école':'Ecole élémentaire République',           'Indicateur ordinateurs':'0.13', 'IPS moyen CM2':'80.50',moyenne_reussite:'2.25',               'indicateur de connexion':'15.0', Reconnect:'Besoin très prioritaire'  },
+    ];
+    computeStats();
+    document.getElementById('status').textContent = 'Mode démo (hors Grist)';
+    document.getElementById('headerSub').textContent = `${allRecords.length} établissements chargés`;
+    // Démo collège
+    document.getElementById('btnColleges').click();
+    document.getElementById('searchInput').value = 'jean';
+    render('jean');
+  }
+</script>
+</body>
+</html>
