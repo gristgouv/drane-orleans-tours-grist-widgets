@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reconnect – Carte</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --good:    #16a34a;
+      --warn:    #d97706;
+      --bad:     #dc2626;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --mono:    'DM Mono', monospace;
+      --sans:    'DM Sans', sans-serif;
+      --p1:      #dc2626; --p1-lt: #fef2f2; --p1-c: #b91c1c;
+      --p2:      #d97706; --p2-lt: #fff7ed; --p2-c: #c2410c;
+      --p3:      #16a34a; --p3-lt: #f0fdf4; --p3-c: #166534;
+    }
+    html, body { height: 100%; overflow: hidden; font-family: var(--sans); color: var(--text); background: var(--bg); }
+
+    /* ── Layout ── */
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── Toolbar ── */
+    #toolbar {
+      flex-shrink: 0;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 10px 14px; background: var(--surface);
+      border-bottom: 1px solid var(--border); z-index: 100;
+    }
+    .toolbar-title { font-size: 13px; font-weight: 700; margin-right: 4px; }
+
+    /* Toggle */
+    .toggle-row { display: flex; gap: 4px; }
+    .toggle-btn {
+      padding: 5px 12px; border: 1.5px solid var(--border); border-radius: 6px;
+      background: var(--surface); font-family: var(--sans); font-size: 11px;
+      font-weight: 500; color: var(--muted); cursor: pointer; transition: all .15s;
+    }
+    .toggle-btn.active { border-color: var(--accent); background: var(--aclt); color: var(--accent); }
+
+    /* Search */
+    .search-wrap { position: relative; flex: 1; min-width: 160px; max-width: 320px; }
+    .search-wrap svg {
+      position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+      width: 14px; height: 14px; stroke: var(--muted); fill: none; stroke-width: 2; stroke-linecap: round;
+      pointer-events: none;
+    }
+    #searchInput {
+      width: 100%; padding: 6px 8px 6px 28px; border: 1.5px solid var(--border); border-radius: 6px;
+      font-family: var(--sans); font-size: 12px; background: var(--bg); color: var(--text);
+      outline: none; transition: border-color .15s;
+    }
+    #searchInput:focus { border-color: var(--accent); background: #fff; }
+    #searchInput::placeholder { color: var(--muted); }
+
+    /* Counter */
+    #counter { font-size: 11px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+
+    /* Legend */
+    .legend { display: flex; gap: 10px; align-items: center; }
+    .leg { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); }
+    .leg-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+    /* ── Map ── */
+    #map-wrap { flex: 1; position: relative; overflow: hidden; }
+    #map { width: 100%; height: 100%; }
+
+    /* ── Card panel ── */
+    #card-panel {
+      position: absolute; top: 10px; right: 10px; bottom: 10px;
+      width: 300px; max-width: calc(100% - 20px);
+      background: var(--surface); border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 24px rgba(0,0,0,.12);
+      display: flex; flex-direction: column;
+      transform: translateX(320px); transition: transform .25s ease;
+      z-index: 500; overflow: hidden;
+    }
+    #card-panel.open { transform: translateX(0); }
+
+    .card-close {
+      position: absolute; top: 10px; right: 10px; width: 24px; height: 24px;
+      border-radius: 50%; background: var(--bg); border: 1px solid var(--border);
+      cursor: pointer; display: grid; place-items: center;
+      font-size: 12px; color: var(--muted); z-index: 1;
+    }
+    .card-close:hover { background: #fee2e2; color: var(--bad); border-color: #fca5a5; }
+
+    .card-header {
+      padding: 16px 16px 12px; border-bottom: 1px solid var(--border);
+      background: var(--bg); flex-shrink: 0;
+    }
+    .card-type { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .card-name { font-size: 14px; font-weight: 700; line-height: 1.3; padding-right: 20px; }
+    .card-sub  { font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .tag-uai {
+      font-family: var(--mono); font-size: 9px; background: var(--aclt);
+      color: var(--accent); border-radius: 3px; padding: 1px 5px; font-weight: 500;
+    }
+
+    .card-body { flex: 1; overflow-y: auto; padding: 14px 16px; }
+
+    /* Badge Reconnect */
+    .badge { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 5px; padding: 3px 8px; }
+    .badge-p1 { background: var(--p1-lt); color: var(--p1-c); }
+    .badge-p2 { background: var(--p2-lt); color: var(--p2-c); }
+    .badge-p3 { background: var(--p3-lt); color: var(--p3-c); }
+
+    /* Indicator rows */
+    .ind-section { margin-bottom: 16px; }
+    .ind-section-title { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
+
+    .ind-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .ind-icon  { font-size: 14px; flex-shrink: 0; }
+    .ind-info  { flex: 1; min-width: 0; }
+    .ind-label { font-size: 10px; color: var(--muted); }
+    .ind-val   { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+    .ind-bar-track { width: 100%; height: 5px; background: var(--border); border-radius: 3px; margin-top: 3px; overflow: hidden; }
+    .ind-bar-fill  { height: 100%; border-radius: 3px; transition: width .3s ease; }
+    .ind-diff  { font-size: 10px; white-space: nowrap; flex-shrink: 0; }
+    .diff-good { color: var(--good); }
+    .diff-bad  { color: var(--bad);  }
+    .diff-neu  { color: var(--muted); }
+
+    /* Schools list inside college card */
+    .schools-list { display: flex; flex-direction: column; gap: 6px; }
+    .school-item {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 10px;
+    }
+    .school-item-name { font-size: 11px; font-weight: 600; }
+    .school-item-sub  { font-size: 10px; color: var(--muted); display: flex; gap: 6px; align-items: center; margin-top: 2px; }
+
+    /* Divider */
+    .card-divider { height: 1px; background: var(--border); margin: 12px 0; }
+
+    /* ── Leaflet custom markers ── */
+    .mk { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer; transition: transform .15s; }
+    .mk:hover, .mk.selected { transform: scale(1.5); z-index: 999 !important; }
+    .mk-p1 { background: var(--p1); }
+    .mk-p2 { background: var(--p2); }
+    .mk-p3 { background: var(--p3); }
+    .mk-college { width: 18px; height: 18px; border-width: 2.5px; border-color: #1e293b; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <span class="toolbar-title">🗺️ Reconnect</span>
+    <div class="toggle-row">
+      <button class="toggle-btn active" id="btnEcoles"   onclick="switchMode('ecoles')">🏫 Écoles</button>
+      <button class="toggle-btn"        id="btnColleges" onclick="switchMode('colleges')">🏛️ Collèges</button>
+    </div>
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="searchInput" placeholder="Filtrer sur la carte…" autocomplete="off" />
+    </div>
+    <div class="legend">
+      <span class="leg"><span class="leg-dot" style="background:var(--p1)"></span>Très prioritaire</span>
+      <span class="leg"><span class="leg-dot" style="background:var(--p2)"></span>Prioritaire</span>
+      <span class="leg"><span class="leg-dot" style="background:var(--p3)"></span>Moins prioritaire</span>
+    </div>
+    <span id="counter">—</span>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+
+    <div id="card-panel">
+      <div class="card-close" onclick="closeCard()">✕</div>
+      <div id="card-header" class="card-header"></div>
+      <div id="card-body"   class="card-body"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ════ ÉTAT ════ */
+  let allRecords = [];
+  let mode = 'ecoles';
+  let markers = [];
+  let selectedMarker = null;
+  let STATS = { ordi:{}, ips:{}, reussite:{}, connexion:{} };
+
+  /* ════ COLONNES ════ */
+  const RES = (rec, keys) => { for (const k of keys) if (rec[k] !== undefined) return rec[k]; return undefined; };
+  const UAI_C    = ['UAI_college'];
+  const NOM_C    = ['Nom_du_coll_ge_associ_','Nom du collège associé','Nom_du_college_associe'];
+  const UAI_E    = ['UAI_ecole'];
+  const NOM_E    = ['Appellation_officielle__cole','Appellation officielle école','Appellation_officielle_ecole'];
+  const ORDI     = ['Indicateur_ordinateurs','Indicateur ordinateurs','indicateur_ordinateurs'];
+  const IPS      = ['IPS_moyen_CM2','IPS moyen CM2'];
+  const REUSSITE = ['moyenne_reussite','Moyenne_reussite'];
+  const CONNEXION= ['indicateur_de_connexion','indicateur de connexion','Indicateur_de_connexion','Indicateur de connexion'];
+  const RECONNECT= ['Reconnect','reconnect'];
+  const LAT_E    = ['latitude'];
+  const LNG_E    = ['longitude'];
+  // Coordonnées collège : colonnes de formule Grist ($UAI_college.latitude / $UAI_college.longitude)
+  // Nommer ces colonnes dans Grist : "college_latitude" et "college_longitude"
+  // (ou laisser Grist les nommer automatiquement : "UAI_college_latitude" / "UAI_college_longitude")
+  const LAT_C = ['college_latitude','UAI_college_latitude','lat_college','latitude_college','College_latitude'];
+  const LNG_C = ['college_longitude','UAI_college_longitude','lng_college','longitude_college','College_longitude'];
+
+  function fld(rec, keys) {
+    const v = RES(rec, keys);
+    if (v === undefined || v === null || String(v).trim() === '') return null;
+    const n = parseFloat(v); return isNaN(n) ? null : n;
+  }
+  function str(rec, keys) {
+    const v = RES(rec, keys);
+    return (v === undefined || v === null) ? '' : String(v).trim();
+  }
+
+  /* ════ STATS ════ */
+  function computeStats() {
+    const get = arr => {
+      const v = arr.filter(x => x !== null);
+      if (!v.length) return { mean:null, min:null, max:null, n:0 };
+      const mean = v.reduce((a,b)=>a+b,0)/v.length;
+      return { mean, min:Math.min(...v), max:Math.max(...v), n:v.length };
+    };
+    STATS.ordi      = get(allRecords.map(r => fld(r, ORDI)));
+    STATS.ips       = get(allRecords.map(r => fld(r, IPS)));
+    STATS.reussite  = get(allRecords.map(r => fld(r, REUSSITE)));
+    STATS.connexion = get(allRecords.map(r => fld(r, CONNEXION)));
+  }
+
+  /* ════ HELPERS ════ */
+  const norm    = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const escHtml = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtNum  = (v, d=2) => v===null ? '—' : Number(v).toFixed(d);
+
+  function reconnectClass(val) {
+    const n = norm(val||'');
+    if (n.includes('tres')||n.includes('très')) return 'p1';
+    if (n.includes('moins')) return 'p3';
+    return 'p2';
+  }
+  function reconnectBadge(val) {
+    if (!val) return '';
+    const cls = reconnectClass(val);
+    const emoji = cls==='p1'?'🔴':cls==='p3'?'🟢':'🟡';
+    return `<span class="badge badge-${cls}">${emoji} ${escHtml(val)}</span>`;
+  }
+
+  /* ════ INDICATEUR ROW ════ */
+  const HIGHER_BETTER = { ordi:true, ips:null, reussite:true, connexion:true };
+
+  function indRow(icon, label, val, statKey, dec) {
+    const s = STATS[statKey];
+    const mean = s.mean;
+    const dir  = HIGHER_BETTER[statKey];
+    const pct  = (val!==null&&s.min!==null&&s.max!==null&&s.max!==s.min)
+      ? Math.max(0, Math.min(100, ((val-s.min)/(s.max-s.min))*100)) : 0;
+
+    let cls = 'diff-neu', arrow = '';
+    if (val!==null && mean!==null && dir!==null) {
+      const thr = Math.abs(mean)*0.05;
+      if (Math.abs(val-mean) > thr) {
+        cls   = (dir ? val>mean : val<mean) ? 'diff-good' : 'diff-bad';
+        arrow = val>mean ? '▲' : '▼';
+      } else { arrow = '→'; }
+    }
+    const diff = (val!==null&&mean!==null) ? `${arrow} ${val>mean?'+':''}${(val-mean).toFixed(dec)} vs moy.` : '';
+    const barClr = cls==='diff-good'?'#16a34a':cls==='diff-bad'?'#dc2626':'#94a3b8';
+
+    return `<div class="ind-row">
+      <span class="ind-icon">${icon}</span>
+      <div class="ind-info">
+        <div class="ind-label">${escHtml(label)}</div>
+        <div class="ind-val">${fmtNum(val,dec)}</div>
+        <div class="ind-bar-track"><div class="ind-bar-fill" style="width:${pct}%;background:${barClr}"></div></div>
+      </div>
+      <span class="ind-diff ${cls}">${diff}</span>
+    </div>`;
+  }
+
+  /* ════ CARTE ÉCOLE ════ */
+  function renderSchoolCard(rec) {
+    const nomE = str(rec, NOM_E);
+    const uaiE = str(rec, UAI_E);
+    const nomC = str(rec, NOM_C);
+    const uaiC = str(rec, UAI_C);
+    const reconnect = str(rec, RECONNECT);
+
+    document.getElementById('card-header').innerHTML = `
+      <div class="card-type">🏫 École</div>
+      <div class="card-name">${escHtml(nomE||'—')}</div>
+      <div class="card-sub">
+        <span class="tag-uai">${escHtml(uaiE)}</span>
+        ${reconnectBadge(reconnect)}
+      </div>
+      <div style="margin-top:6px;font-size:11px;color:var(--muted)">
+        🏛️ ${escHtml(nomC||'—')} <span class="tag-uai">${escHtml(uaiC)}</span>
+      </div>`;
+
+    document.getElementById('card-body').innerHTML = `
+      <div class="ind-section">
+        <div class="ind-section-title">Indicateurs (vs moyenne globale)</div>
+        ${indRow('💻','Indicateur ordinateurs',   fld(rec,ORDI),      'ordi',      2)}
+        ${indRow('📊','IPS moyen CM2',             fld(rec,IPS),       'ips',       1)}
+        ${indRow('✅','Moy. réussite CM2',         fld(rec,REUSSITE),  'reussite',  2)}
+        ${indRow('📶','Indicateur de connexion',   fld(rec,CONNEXION), 'connexion', 1)}
+      </div>`;
+  }
+
+  /* ════ CARTE COLLÈGE ════ */
+  function renderCollegeCard(college) {
+    // college = { uaiC, nomC, ecoles:[] }
+    const counts = {p1:0,p2:0,p3:0};
+    for (const r of college.ecoles) {
+      counts[reconnectClass(str(r,RECONNECT))]++;
+    }
+
+    const avg = keys => {
+      const v = college.ecoles.map(r=>fld(r,keys)).filter(x=>x!==null);
+      return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null;
+    };
+
+    document.getElementById('card-header').innerHTML = `
+      <div class="card-type">🏛️ Collège</div>
+      <div class="card-name">${escHtml(college.nomC||'—')}</div>
+      <div class="card-sub">
+        <span class="tag-uai">${escHtml(college.uaiC)}</span>
+        <span>${college.ecoles.length} école${college.ecoles.length>1?'s':''}</span>
+      </div>
+      <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
+        ${counts.p1?`<span class="badge badge-p1">🔴 ×${counts.p1}</span>`:''}
+        ${counts.p2?`<span class="badge badge-p2">🟡 ×${counts.p2}</span>`:''}
+        ${counts.p3?`<span class="badge badge-p3">🟢 ×${counts.p3}</span>`:''}
+      </div>`;
+
+    const schoolItems = college.ecoles.map(r => `
+      <div class="school-item">
+        <div class="school-item-name">${escHtml(str(r,NOM_E)||'—')}</div>
+        <div class="school-item-sub">
+          <span class="tag-uai">${escHtml(str(r,UAI_E))}</span>
+          ${reconnectBadge(str(r,RECONNECT))}
+        </div>
+      </div>`).join('');
+
+    document.getElementById('card-body').innerHTML = `
+      <div class="ind-section">
+        <div class="ind-section-title">Moyennes du collège (vs moy. globale)</div>
+        ${indRow('💻','Indicateur ordinateurs',  avg(ORDI),      'ordi',      2)}
+        ${indRow('📊','IPS moyen CM2',            avg(IPS),       'ips',       1)}
+        ${indRow('✅','Moy. réussite CM2',        avg(REUSSITE),  'reussite',  2)}
+        ${indRow('📶','Indicateur de connexion',  avg(CONNEXION), 'connexion', 1)}
+      </div>
+      <div class="card-divider"></div>
+      <div class="ind-section">
+        <div class="ind-section-title">Écoles associées</div>
+        <div class="schools-list">${schoolItems}</div>
+      </div>`;
+  }
+
+  function openCard() { document.getElementById('card-panel').classList.add('open'); }
+  function closeCard() {
+    document.getElementById('card-panel').classList.remove('open');
+    if (selectedMarker) { selectedMarker._icon?.classList.remove('selected'); selectedMarker = null; }
+  }
+
+  /* ════ CARTE LEAFLET ════ */
+  const map = L.map('map', { zoomControl: true }).setView([47.7, 1.7], 8);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO',
+    maxZoom: 19,
+  }).addTo(map);
+
+  function markerIcon(cls, isCollege) {
+    return L.divIcon({
+      className: '',
+      html: `<div class="mk mk-${cls}${isCollege?' mk-college':''}"></div>`,
+      iconSize: [isCollege?18:14, isCollege?18:14],
+      iconAnchor: [isCollege?9:7, isCollege?9:7],
+    });
+  }
+
+  function clearMarkers() {
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+    selectedMarker = null;
+    closeCard();
+  }
+
+  /* ════ BUILD COLLEGE MAP ════ */
+  function buildCollegeMap() {
+    const map_ = new Map();
+    for (const rec of allRecords) {
+      const uaiC = str(rec, UAI_C);
+      if (!uaiC) continue;
+      if (!map_.has(uaiC)) {
+        map_.set(uaiC, {
+          uaiC,
+          nomC:   str(rec, NOM_C),
+          ecoles: [],
+          lat: fld(rec, LAT_C),
+          lng: fld(rec, LNG_C),
+        });
+      }
+      map_.get(uaiC).ecoles.push(rec);
+    }
+    // Calcul coordonnées collège
+    for (const c of map_.values()) {
+      // Coordonnées issues directement de la colonne formule $UAI_college.latitude / .longitude
+      // Priorité dominante (la plus sévère)
+      const p1 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p1').length;
+      const p2 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p2').length;
+      c.priorityCls = p1 > 0 ? 'p1' : p2 > 0 ? 'p2' : 'p3';
+    }
+    return map_;
+  }
+
+  /* ════ RENDER MARKERS ════ */
+  function renderMarkers(query) {
+    clearMarkers();
+    const q = norm(query.trim());
+
+    if (mode === 'ecoles') {
+      const filtered = allRecords.filter(r => {
+        if (!q) return true;
+        return norm(str(r,NOM_E)).includes(q) || norm(str(r,NOM_C)).includes(q)
+            || norm(str(r,UAI_E)).includes(q);
+      });
+
+      filtered.forEach(rec => {
+        const lat = fld(rec, LAT_E);
+        const lng = fld(rec, LNG_E);
+        if (lat===null || lng===null) return;
+        const cls = reconnectClass(str(rec, RECONNECT));
+        const m   = L.marker([lat, lng], { icon: markerIcon(cls, false) }).addTo(map);
+        m._rec = rec;
+        m.on('click', () => {
+          if (selectedMarker) selectedMarker._icon?.classList.remove('selected');
+          selectedMarker = m;
+          m._icon?.classList.add('selected');
+          renderSchoolCard(rec);
+          openCard();
+        });
+        markers.push(m);
+      });
+
+      document.getElementById('counter').textContent =
+        `${filtered.length} école${filtered.length!==1?'s':''} affichée${filtered.length!==1?'s':''}`;
+
+    } else {
+      // Mode collège
+      const collegeMap = buildCollegeMap();
+      const filtered = Array.from(collegeMap.values()).filter(c => {
+        if (!q) return true;
+        return norm(c.nomC).includes(q) || norm(c.uaiC).includes(q);
+      });
+
+      filtered.forEach(college => {
+        if (college.lat===null || college.lng===null) return;
+        const m = L.marker([college.lat, college.lng], { icon: markerIcon(college.priorityCls, true) }).addTo(map);
+        m._college = college;
+        m.on('click', () => {
+          if (selectedMarker) selectedMarker._icon?.classList.remove('selected');
+          selectedMarker = m;
+          m._icon?.classList.add('selected');
+          renderCollegeCard(college);
+          openCard();
+        });
+        markers.push(m);
+      });
+
+      document.getElementById('counter').textContent =
+        `${filtered.length} collège${filtered.length!==1?'s':''} affiché${filtered.length!==1?'s':''}`;
+    }
+
+    // Ajuster la vue sur les marqueurs visibles
+    if (markers.length > 0) {
+      const group = L.featureGroup(markers);
+      map.fitBounds(group.getBounds().pad(0.1), { maxZoom: 12 });
+    }
+  }
+
+  /* ════ MODE SWITCH ════ */
+  function switchMode(m) {
+    mode = m;
+    document.getElementById('btnEcoles').classList.toggle('active',  m==='ecoles');
+    document.getElementById('btnColleges').classList.toggle('active', m==='colleges');
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchInput').placeholder =
+      m==='ecoles' ? 'Filtrer les écoles…' : 'Filtrer les collèges…';
+    renderMarkers('');
+  }
+
+  /* ════ GRIST onRecord (surligner l'école sélectionnée) ════ */
+  function highlightRecord(rec) {
+    if (!rec || mode !== 'ecoles') return;
+    const uaiE = str(rec, UAI_E);
+    const found = markers.find(m => m._rec && str(m._rec, UAI_E) === uaiE);
+    if (found) {
+      if (selectedMarker) selectedMarker._icon?.classList.remove('selected');
+      selectedMarker = found;
+      found._icon?.classList.add('selected');
+      map.panTo(found.getLatLng());
+      renderSchoolCard(rec);
+      openCard();
+    }
+  }
+
+  /* ════ EVENTS ════ */
+  document.getElementById('searchInput').addEventListener('input', e => renderMarkers(e.target.value));
+
+  /* ════ GRIST ════ */
+  if (typeof grist !== 'undefined') {
+    grist.ready({ requiredAccess: 'read table' });
+    grist.onRecords(records => {
+      allRecords = records;
+      computeStats();
+      renderMarkers(document.getElementById('searchInput').value);
+    });
+    grist.onRecord(rec => highlightRecord(rec));
+  } else {
+    // ── Démo ──
+    // Démo : college_latitude / college_longitude = $UAI_college.latitude / $UAI_college.longitude
+    // Dans Grist, ces colonnes sont des formules sur la table des écoles
+    allRecords = [
+      { id:1, UAI_college:'0410793P','Nom du collège associé':'LEONARD DE VINCI',     UAI_ecole:'0410373H','Appellation officielle école':'Ecole élémentaire Louise de Savoie', latitude:47.348459,longitude:1.751619, college_latitude:47.310000,college_longitude:1.790000, 'Indicateur ordinateurs':'',    'IPS moyen CM2':'84.21',moyenne_reussite:'',    'indicateur de connexion':'32.18',Reconnect:'Besoin très prioritaire'  },
+      { id:2, UAI_college:'0410793P','Nom du collège associé':'LEONARD DE VINCI',     UAI_ecole:'0410374J','Appellation officielle école':'Ecole élémentaire Les Mées',           latitude:47.269000,longitude:1.864700, college_latitude:47.310000,college_longitude:1.790000, 'Indicateur ordinateurs':'0.09', 'IPS moyen CM2':'80.00',moyenne_reussite:'1.95', 'indicateur de connexion':'28.0', Reconnect:'Besoin très prioritaire'  },
+      { id:3, UAI_college:'0280918W','Nom du collège associé':'ANATOLE FRANCE',       UAI_ecole:'0280070Z','Appellation officielle école':'Ecole élémentaire Jean Macé',           latitude:48.080079,longitude:1.345510, college_latitude:48.090000,college_longitude:1.340000, 'Indicateur ordinateurs':'0.11', 'IPS moyen CM2':'75.51',moyenne_reussite:'1.76', 'indicateur de connexion':'1.0',  Reconnect:'Besoin très prioritaire'  },
+      { id:4, UAI_college:'0280918W','Nom du collège associé':'ANATOLE FRANCE',       UAI_ecole:'0280071A','Appellation officielle école':'Ecole élémentaire Ronsard',             latitude:48.113000,longitude:1.331500, college_latitude:48.090000,college_longitude:1.340000, 'Indicateur ordinateurs':'0.07', 'IPS moyen CM2':'71.20',moyenne_reussite:'1.85', 'indicateur de connexion':'5.0',  Reconnect:'Besoin très prioritaire'  },
+      { id:5, UAI_college:'0280783F','Nom du collège associé':'JEAN MOULIN',          UAI_ecole:'0280127D','Appellation officielle école':'Ecole élémentaire Marcel Proust',       latitude:48.445000,longitude:1.489000, college_latitude:48.453000,college_longitude:1.502000, 'Indicateur ordinateurs':'0.04', 'IPS moyen CM2':'83.87',moyenne_reussite:'2.06', 'indicateur de connexion':'',     Reconnect:'Besoin prioritaire'       },
+      { id:6, UAI_college:'0280783F','Nom du collège associé':'JEAN MOULIN',          UAI_ecole:'0280129F','Appellation officielle école':'Ecole élémentaire Paul Bert',            latitude:48.460000,longitude:1.510000, college_latitude:48.453000,college_longitude:1.502000, 'Indicateur ordinateurs':'0.15', 'IPS moyen CM2':'91.20',moyenne_reussite:'2.61', 'indicateur de connexion':'25.0', Reconnect:'Besoin prioritaire'       },
+      { id:7, UAI_college:'0410718J','Nom du collège associé':'JEAN DE LA FONTAINE',  UAI_ecole:'0410047N','Appellation officielle école':'Ecole élémentaire Victor Hugo',          latitude:47.587000,longitude:1.335000, college_latitude:47.592000,college_longitude:1.342000, 'Indicateur ordinateurs':'0.04', 'IPS moyen CM2':'66.41',moyenne_reussite:'2.10', 'indicateur de connexion':'',     Reconnect:'Besoin moins prioritaire' },
+      { id:8, UAI_college:'0410718J','Nom du collège associé':'JEAN DE LA FONTAINE',  UAI_ecole:'0410048P','Appellation officielle école':'Ecole élémentaire Jules Ferry',          latitude:47.598000,longitude:1.348000, college_latitude:47.592000,college_longitude:1.342000, 'Indicateur ordinateurs':'0.21', 'IPS moyen CM2':'88.10',moyenne_reussite:'2.44', 'indicateur de connexion':'18.5', Reconnect:'Besoin moins prioritaire' },
+      { id:9, UAI_college:'0410150B','Nom du collège associé':'PIERRE ET MARIE CURIE',UAI_ecole:'0410200H','Appellation officielle école':'Ecole élémentaire Ampère',              latitude:47.650000,longitude:1.730000, college_latitude:47.658000,college_longitude:1.738000, 'Indicateur ordinateurs':'0.08', 'IPS moyen CM2':'72.30',moyenne_reussite:'1.90', 'indicateur de connexion':'42.0', Reconnect:'Besoin très prioritaire'  },
+      { id:10,UAI_college:'0410150B','Nom du collège associé':'PIERRE ET MARIE CURIE',UAI_ecole:'0410201J','Appellation officielle école':'Ecole élémentaire République',         latitude:47.661000,longitude:1.745000, college_latitude:47.658000,college_longitude:1.738000, 'Indicateur ordinateurs':'0.13', 'IPS moyen CM2':'80.50',moyenne_reussite:'2.25', 'indicateur de connexion':'15.0', Reconnect:'Besoin très prioritaire'  },
+    ];
+    computeStats();
+    renderMarkers('');
+  }
+</script>
+</body>
+</html>
