@@ -208,11 +208,31 @@
   const RECONNECT= ['Reconnect','reconnect'];
   const LAT_E    = ['latitude'];
   const LNG_E    = ['longitude'];
-  // Coordonnées collège : colonnes de formule Grist ($UAI_college.latitude / $UAI_college.longitude)
-  // Nommer ces colonnes dans Grist : "college_latitude" et "college_longitude"
-  // (ou laisser Grist les nommer automatiquement : "UAI_college_latitude" / "UAI_college_longitude")
+  // Coordonnées collège : recherche dynamique parmi toutes les clés du record
+  // → toute colonne contenant "college"+"lat" ou "college"+"lon/lng" est acceptée
   const LAT_C = ['college_latitude','UAI_college_latitude','lat_college','latitude_college','College_latitude'];
   const LNG_C = ['college_longitude','UAI_college_longitude','lng_college','longitude_college','College_longitude'];
+
+  function findCollegeCoord(rec, type) {
+    // 1. Essai avec les candidats statiques
+    const keys = type === 'lat' ? LAT_C : LNG_C;
+    for (const k of keys) {
+      if (rec[k] !== undefined && rec[k] !== null && String(rec[k]).trim() !== '') {
+        const n = parseFloat(rec[k]);
+        if (!isNaN(n)) return n;
+      }
+    }
+    // 2. Recherche dynamique : toute clé contenant "college" et "lat" (ou "lon"/"lng")
+    const needle = type === 'lat' ? 'lat' : 'lo';
+    for (const k of Object.keys(rec)) {
+      const kl = k.toLowerCase();
+      if (kl.includes('college') && kl.includes(needle)) {
+        const n = parseFloat(rec[k]);
+        if (!isNaN(n)) return n;
+      }
+    }
+    return null;
+  }
 
   function fld(rec, keys) {
     const v = RES(rec, keys);
@@ -408,8 +428,8 @@
       const c = map_.get(uaiC);
       c.ecoles.push(rec);
       // Prendre les coordonnées dès qu'on trouve une valeur non-nulle dans n'importe quel record du groupe
-      if (c.lat === null) c.lat = fld(rec, LAT_C);
-      if (c.lng === null) c.lng = fld(rec, LNG_C);
+      if (c.lat === null) c.lat = findCollegeCoord(rec, 'lat');
+      if (c.lng === null) c.lng = findCollegeCoord(rec, 'lng');
     }
     for (const c of map_.values()) {
       const p1 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p1').length;
@@ -479,11 +499,22 @@
       let msg = `${placed} collège${placed!==1?'s':''} affiché${placed!==1?'s':''}`;
       if (skipped > 0) {
         msg += ` · ⚠️ ${skipped} sans coordonnées`;
-        const cols = allRecords.length ? Object.keys(allRecords[0]).filter(k=>k.toLowerCase().includes('lat')||k.toLowerCase().includes('college')) : [];
-        console.warn('[Carte Reconnect] Colonnes détectées avec lat/college:', cols);
-        console.warn('[Carte Reconnect] Candidates cherchées:', LAT_C);
       }
       document.getElementById('counter').textContent = msg;
+      // Affichage diagnostique si aucun marqueur
+      if (placed === 0 && filtered.length > 0) {
+        const allKeys = allRecords.length ? Object.keys(allRecords[0]) : [];
+        const relKeys = allKeys.filter(k => k.toLowerCase().includes('lat') || k.toLowerCase().includes('lon') || k.toLowerCase().includes('college'));
+        const sample = allRecords[0] ? relKeys.map(k => `${k}=${allRecords[0][k]}`).join(', ') : '—';
+        document.getElementById('map').insertAdjacentHTML('afterbegin',
+          `<div style="position:absolute;top:10px;left:10px;z-index:999;background:#fff;border:1px solid #f59e0b;border-radius:8px;padding:12px 14px;max-width:420px;font-size:11px;font-family:monospace;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+            <strong>⚠️ Aucun marqueur collège — colonnes détectées dans le record :</strong><br><br>
+            <em>Colonnes lat/lon/college :</em> ${relKeys.join(', ') || '(aucune)'}<br>
+            <em>Valeurs :</em> ${sample || '—'}<br><br>
+            <em>Colonnes cherchées :</em> ${LAT_C.join(', ')}
+          </div>`
+        );
+      }
     }
 
     // Ajuster la vue sur les marqueurs visibles
