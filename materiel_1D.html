@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ratio Ordinateur – Écoles</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f4f6f9;
+      --surface:   #ffffff;
+      --border:    #e2e6ed;
+      --accent:    #2563eb;
+      --accent-lt: #dbeafe;
+      --good:      #16a34a;
+      --warn:      #d97706;
+      --bad:       #dc2626;
+      --text:      #1e293b;
+      --muted:     #64748b;
+      --mono:      'DM Mono', monospace;
+      --sans:      'DM Sans', sans-serif;
+      --radius:    10px;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px;
+      font-size: 14px;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .header-icon {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: grid; place-items: center;
+      flex-shrink: 0;
+    }
+    .header-icon svg { width: 20px; height: 20px; fill: #fff; }
+    .header h1 { font-size: 15px; font-weight: 600; color: var(--text); }
+    .header p  { font-size: 11px; color: var(--muted); }
+
+    /* ── Search bar ── */
+    .search-wrap {
+      position: relative;
+      margin-bottom: 12px;
+    }
+    .search-wrap svg {
+      position: absolute;
+      left: 12px; top: 50%;
+      transform: translateY(-50%);
+      width: 16px; height: 16px;
+      stroke: var(--muted);
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      pointer-events: none;
+    }
+    #searchInput {
+      width: 100%;
+      padding: 10px 12px 10px 38px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      font-family: var(--sans);
+      font-size: 13px;
+      background: var(--surface);
+      color: var(--text);
+      transition: border-color .15s;
+      outline: none;
+    }
+    #searchInput:focus { border-color: var(--accent); }
+    #searchInput::placeholder { color: var(--muted); }
+
+    /* ── Status bar ── */
+    #status {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      min-height: 16px;
+    }
+
+    /* ── Results list ── */
+    #results {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .result-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .result-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 2px 8px rgba(37,99,235,.1);
+    }
+    .result-card.active {
+      border-color: var(--accent);
+      background: #f0f6ff;
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .card-meta { flex: 1; min-width: 0; }
+    .card-name {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .tag-uai {
+      font-family: var(--mono);
+      font-size: 10px;
+      background: var(--accent-lt);
+      color: var(--accent);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-weight: 500;
+    }
+
+    /* ── Ratio badge ── */
+    .ratio-badge {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+    .ratio-value {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 500;
+      line-height: 1;
+    }
+    .ratio-label {
+      font-size: 9px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-top: 2px;
+    }
+    .color-good { color: var(--good); }
+    .color-warn { color: var(--warn); }
+    .color-bad  { color: var(--bad);  }
+
+    /* ── Detail panel (expanded) ── */
+    .detail-panel {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+    }
+    .detail-item { }
+    .detail-item .di-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+    .detail-item .di-value {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text);
+      margin-top: 2px;
+    }
+
+    /* ── Bar comparator ── */
+    .bar-section {
+      margin-top: 10px;
+    }
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    .bar-lbl {
+      font-size: 10px;
+      color: var(--muted);
+      width: 80px;
+      flex-shrink: 0;
+    }
+    .bar-track {
+      flex: 1;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width .4s ease;
+    }
+    .bar-num {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      width: 36px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* ── Empty states ── */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+    }
+    .empty-state svg {
+      width: 40px; height: 40px;
+      stroke: var(--border);
+      fill: none;
+      stroke-width: 1.5;
+      margin-bottom: 10px;
+    }
+    .empty-state p { font-size: 13px; }
+
+    mark { background: var(--accent-lt); color: var(--accent); border-radius: 2px; padding: 0 1px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">
+    <svg viewBox="0 0 24 24"><path d="M12 3L2 9l10 6 10-6-10-6zM2 17l10 6 10-6M2 13l10 6 10-6"/></svg>
+  </div>
+  <div>
+    <h1>Ratio Ordinateur</h1>
+    <p>Rechercher une école par UAI ou nom</p>
+  </div>
+</div>
+
+<div class="search-wrap">
+  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+  <input id="searchInput" type="text" placeholder="Ex : 0280576Z ou Charlemagne…" autocomplete="off" />
+</div>
+
+<div id="status">En attente des données Grist…</div>
+<div id="results"></div>
+
+<script>
+  let allRecords = [];
+  let expandedId = null;
+  const MAX_RESULTS = 50;
+
+  /* ── Helpers ── */
+  function norm(s) {
+    return String(s ?? '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function fmt(v) {
+    if (v === null || v === undefined || v === '' || isNaN(v)) return '—';
+    return Number(v).toFixed(1);
+  }
+
+  function ratioColor(v, moy) {
+    if (isNaN(v)) return '';
+    if (moy && !isNaN(moy)) {
+      if (v >= moy * 1.1) return 'color-good';
+      if (v <= moy * 0.9) return 'color-bad';
+      return 'color-warn';
+    }
+    if (v >= 80) return 'color-good';
+    if (v >= 40) return 'color-warn';
+    return 'color-bad';
+  }
+
+  function highlight(text, query) {
+    if (!query) return escHtml(text);
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(${escaped})`, 'gi');
+    return escHtml(text).replace(re, '<mark>$1</mark>');
+  }
+
+  function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  /* ── Resolve column names (Grist may rename accented/special chars) ── */
+  function resolveField(rec, candidates) {
+    for (const c of candidates) {
+      if (rec[c] !== undefined) return rec[c];
+    }
+    return null;
+  }
+
+  function extractFields(rec) {
+    return {
+      uai:          resolveField(rec, ['UAI','uai']),
+      nom:          resolveField(rec, ['Nom','nom','name']),
+      ville:        resolveField(rec, ['Ville','ville']),
+      dept:         resolveField(rec, ['D_partement__texte_','Département__texte_','departement','dept','Departement_texte_']),
+      nbEleves:     resolveField(rec, ['Nb_eleves','nb_eleves','Nb_Eleves']),
+      ratio:        resolveField(rec, ['ratio_ordinateur']),
+      moyDept:      resolveField(rec, ['Moy_depart_ratio_ordi']),
+      moyCommune:   resolveField(rec, ['Moy_commune_ratio_ordi']),
+      moyAcad:      resolveField(rec, ['Moy_acad_ratio_ordi']),
+      ratioTab:     resolveField(rec, ['ratio_tablette']),
+      moyDeptTab:   resolveField(rec, ['Moy_depart_ratio_tablette']),
+    };
+  }
+
+  /* ── Render ── */
+  function render(query) {
+    const q = norm(query.trim());
+    const results = document.getElementById('results');
+    const status  = document.getElementById('status');
+
+    if (!allRecords.length) {
+      status.textContent = 'Aucune donnée disponible.';
+      results.innerHTML = '';
+      return;
+    }
+
+    // Filter
+    let filtered = q === ''
+      ? allRecords.slice(0, MAX_RESULTS)
+      : allRecords.filter(r => {
+          const f = extractFields(r);
+          return norm(f.uai).includes(q) || norm(f.nom).includes(q);
+        }).slice(0, MAX_RESULTS);
+
+    status.textContent = q === ''
+      ? `${allRecords.length} écoles • tapez pour filtrer`
+      : `${filtered.length} résultat${filtered.length > 1 ? 's' : ''} pour « ${query} »`;
+
+    if (!filtered.length) {
+      results.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <p>Aucune école trouvée</p>
+        </div>`;
+      return;
+    }
+
+    results.innerHTML = filtered.map(rec => {
+      const f = extractFields(rec);
+      const id = rec.id;
+      const ratio = parseFloat(f.ratio);
+      const moyDept = parseFloat(f.moyDept);
+      const isExpanded = expandedId === id;
+      const colorClass = ratioColor(ratio, moyDept);
+      const ratioStr = fmt(ratio);
+      const nomClean = String(f.nom ?? '').trim();
+      const uaiStr   = String(f.uai ?? '').trim();
+
+      const barMax = Math.max(ratio || 0, moyDept || 0, parseFloat(f.moyAcad) || 0, parseFloat(f.moyCommune) || 0, 1);
+
+      const detailHtml = isExpanded ? `
+        <div class="detail-panel">
+          <div class="detail-item">
+            <div class="di-label">Nb élèves</div>
+            <div class="di-value">${fmt(f.nbEleves)}</div>
+          </div>
+          <div class="detail-item">
+            <div class="di-label">Ratio tablette</div>
+            <div class="di-value">${fmt(f.ratioTab)}</div>
+          </div>
+          <div class="detail-item">
+            <div class="di-label">Moy. académie</div>
+            <div class="di-value">${fmt(f.moyAcad)}</div>
+          </div>
+          <div class="detail-item">
+            <div class="di-label">Moy. département</div>
+            <div class="di-value">${fmt(f.moyDept)}</div>
+          </div>
+          <div class="detail-item">
+            <div class="di-label">Moy. commune</div>
+            <div class="di-value">${fmt(f.moyCommune)}</div>
+          </div>
+        </div>
+        <div class="bar-section">
+          ${barRow('Cette école',  ratio,           barMax, '#2563eb')}
+          ${barRow('Moy. commune', f.moyCommune,    barMax, '#7c3aed')}
+          ${barRow('Moy. dépt',    f.moyDept,       barMax, '#0891b2')}
+          ${barRow('Moy. acad.',   f.moyAcad,       barMax, '#64748b')}
+        </div>
+      ` : '';
+
+      return `
+        <div class="result-card ${isExpanded ? 'active' : ''}" data-id="${id}">
+          <div class="card-top">
+            <div class="card-meta">
+              <div class="card-name">${highlight(nomClean, query)}</div>
+              <div class="card-sub">
+                <span class="tag-uai">${escHtml(uaiStr)}</span>
+                <span>${escHtml(String(f.ville ?? ''))}</span>
+                ${f.dept ? `<span>${escHtml(String(f.dept))}</span>` : ''}
+              </div>
+            </div>
+            <div class="ratio-badge">
+              <div class="ratio-value ${colorClass}">${ratioStr}</div>
+              <div class="ratio-label">ordi / 100 él.</div>
+            </div>
+          </div>
+          ${detailHtml}
+        </div>`;
+    }).join('');
+
+    // Click handlers
+    results.querySelectorAll('.result-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = parseInt(card.dataset.id);
+        expandedId = expandedId === id ? null : id;
+        render(document.getElementById('searchInput').value);
+      });
+    });
+  }
+
+  function barRow(label, value, max, color) {
+    const v = parseFloat(value);
+    if (isNaN(v)) return '';
+    const pct = Math.min(100, (v / max) * 100).toFixed(1);
+    return `
+      <div class="bar-row">
+        <span class="bar-lbl">${label}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <span class="bar-num">${fmt(v)}</span>
+      </div>`;
+  }
+
+  /* ── Grist integration ── */
+  document.getElementById('searchInput').addEventListener('input', e => {
+    expandedId = null;
+    render(e.target.value);
+  });
+
+  function onRecords(records) {
+    allRecords = records;
+    render(document.getElementById('searchInput').value);
+  }
+
+  if (typeof grist !== 'undefined') {
+    grist.ready({ requiredAccess: 'read table' });
+    grist.onRecords(onRecords);
+  } else {
+    // Développement hors Grist : données fictives
+    document.getElementById('status').textContent = 'Mode démo (hors Grist)';
+    allRecords = [
+      { id: 1, UAI: '0280576Z', Nom: ' Ecole primaire Charlemagne - Saint-Martin-de-Nigelles', Ville: 'ST MARTIN DE NIGELLES', ratio_ordinateur: 4.0,  Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 4.0,  Nb_eleves: 130, ratio_tablette: null },
+      { id: 2, UAI: '0280580D', Nom: ' Ecole primaire - Villiers-le-Morhier',                  Ville: 'VILLIERS LE MORHIER',   ratio_ordinateur: 33.0, Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 33.0, Nb_eleves: 126, ratio_tablette: null },
+      { id: 3, UAI: '0280910M', Nom: ' Ecole élémentaire Emile Pottier - Gallardon',           Ville: 'GALLARDON',            ratio_ordinateur: 4.0,  Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 4.0,  Nb_eleves: 197, ratio_tablette: null },
+    ];
+    render('');
+  }
+</script>
+</body>
+</html>
