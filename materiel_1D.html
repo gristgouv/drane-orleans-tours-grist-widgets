@@ -37,228 +37,134 @@
 
     /* ── Header ── */
     .header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
     }
     .header-icon {
-      width: 36px; height: 36px;
-      background: var(--accent);
-      border-radius: 8px;
-      display: grid; place-items: center;
-      flex-shrink: 0;
+      width: 36px; height: 36px; background: var(--accent);
+      border-radius: 8px; display: grid; place-items: center; flex-shrink: 0;
     }
     .header-icon svg { width: 20px; height: 20px; fill: #fff; }
-    .header h1 { font-size: 15px; font-weight: 600; color: var(--text); }
+    .header h1 { font-size: 15px; font-weight: 600; }
     .header p  { font-size: 11px; color: var(--muted); }
 
-    /* ── Search bar ── */
-    .search-wrap {
-      position: relative;
-      margin-bottom: 12px;
+    /* ── Mode toggle ── */
+    .toggle-row { display: flex; gap: 6px; margin-bottom: 12px; }
+    .toggle-btn {
+      flex: 1; padding: 8px 10px;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      background: var(--surface); font-family: var(--sans);
+      font-size: 12px; font-weight: 500; color: var(--muted);
+      cursor: pointer; transition: all .15s;
     }
+    .toggle-btn.active {
+      border-color: var(--accent); background: var(--accent-lt); color: var(--accent);
+    }
+
+    /* ── Search bar ── */
+    .search-wrap { position: relative; margin-bottom: 10px; }
     .search-wrap svg {
-      position: absolute;
-      left: 12px; top: 50%;
-      transform: translateY(-50%);
-      width: 16px; height: 16px;
-      stroke: var(--muted);
-      fill: none;
-      stroke-width: 2;
-      stroke-linecap: round;
-      pointer-events: none;
+      position: absolute; left: 12px; top: 50%;
+      transform: translateY(-50%); width: 16px; height: 16px;
+      stroke: var(--muted); fill: none; stroke-width: 2;
+      stroke-linecap: round; pointer-events: none;
     }
     #searchInput {
-      width: 100%;
-      padding: 10px 12px 10px 38px;
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius);
-      font-family: var(--sans);
-      font-size: 13px;
-      background: var(--surface);
-      color: var(--text);
-      transition: border-color .15s;
-      outline: none;
+      width: 100%; padding: 10px 12px 10px 38px;
+      border: 1.5px solid var(--border); border-radius: var(--radius);
+      font-family: var(--sans); font-size: 13px;
+      background: var(--surface); color: var(--text);
+      transition: border-color .15s; outline: none;
     }
     #searchInput:focus { border-color: var(--accent); }
     #searchInput::placeholder { color: var(--muted); }
 
-    /* ── Status bar ── */
-    #status {
-      font-size: 11px;
-      color: var(--muted);
-      margin-bottom: 8px;
-      min-height: 16px;
-    }
+    /* ── Status ── */
+    #status { font-size: 11px; color: var(--muted); margin-bottom: 8px; min-height: 16px; }
 
-    /* ── Results list ── */
-    #results {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
+    /* ── Results ── */
+    #results { display: flex; flex-direction: column; gap: 6px; }
 
     .result-card {
-      background: var(--surface);
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-      cursor: pointer;
-      transition: border-color .15s, box-shadow .15s;
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px;
+      cursor: pointer; transition: border-color .15s, box-shadow .15s;
     }
-    .result-card:hover {
-      border-color: var(--accent);
-      box-shadow: 0 2px 8px rgba(37,99,235,.1);
-    }
-    .result-card.active {
-      border-color: var(--accent);
-      background: #f0f6ff;
-    }
+    .result-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(37,99,235,.1); }
+    .result-card.active { border-color: var(--accent); background: #f0f6ff; }
 
-    .card-top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 8px;
-    }
-    .card-meta { flex: 1; min-width: 0; }
     .card-name {
-      font-weight: 600;
-      font-size: 13px;
-      color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-weight: 600; font-size: 13px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .card-sub {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 2px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
+      font-size: 11px; color: var(--muted); margin-top: 3px;
+      display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
     }
     .tag-uai {
-      font-family: var(--mono);
-      font-size: 10px;
-      background: var(--accent-lt);
-      color: var(--accent);
-      border-radius: 4px;
-      padding: 1px 5px;
-      font-weight: 500;
+      font-family: var(--mono); font-size: 10px;
+      background: var(--accent-lt); color: var(--accent);
+      border-radius: 4px; padding: 1px 5px; font-weight: 500;
+    }
+    .tag-dept {
+      font-size: 10px; background: #f1f5f9; color: var(--muted);
+      border-radius: 4px; padding: 1px 5px;
     }
 
     /* ── Metric tiles ── */
     .metrics-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
-      margin-top: 10px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px;
     }
     .metric-tile {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 10px;
+      display: flex; flex-direction: column; gap: 2px;
     }
-    .metric-tile.active { background: #fff; }
-    .mt-icon-label {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
+    .metric-tile.active-card { background: #fff; }
+    .mt-icon-label { display: flex; align-items: center; gap: 4px; }
     .mt-icon { font-size: 12px; }
     .mt-label {
-      font-size: 9px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: .4px;
-      font-weight: 500;
+      font-size: 9px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .4px; font-weight: 500;
     }
-    .mt-value {
-      font-family: var(--mono);
-      font-size: 18px;
-      font-weight: 500;
-      line-height: 1.1;
-    }
-    .mt-sub {
-      font-size: 10px;
-      color: var(--muted);
-      line-height: 1.3;
-    }
+    .mt-value { font-family: var(--mono); font-size: 18px; font-weight: 500; line-height: 1.1; }
+    .mt-sub   { font-size: 10px; color: var(--muted); line-height: 1.3; }
+
     .color-good { color: var(--good); }
     .color-warn { color: var(--warn); }
     .color-bad  { color: var(--bad);  }
 
-    /* ── Comparison table (expanded) ── */
+    /* ── Comparison table ── */
     .cmp-section {
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid var(--border);
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
     }
     .cmp-title {
-      font-size: 10px;
-      font-weight: 600;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: .5px;
-      margin-bottom: 6px;
+      font-size: 10px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px;
     }
-    .cmp-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
+    .cmp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .cmp-table thead th {
-      text-align: right;
-      font-size: 10px;
-      font-weight: 600;
-      color: var(--muted);
-      padding: 2px 6px 4px;
+      text-align: right; font-size: 10px; font-weight: 600;
+      color: var(--muted); padding: 2px 6px 4px;
     }
     .cmp-table thead th:first-child { text-align: left; }
     .cmp-lbl {
-      color: var(--muted);
-      font-size: 11px;
-      padding: 4px 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 110px;
+      color: var(--muted); font-size: 11px; padding: 4px 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
     }
     .cmp-val {
-      font-family: var(--mono);
-      font-size: 12px;
-      text-align: right;
-      padding: 4px 6px;
-      color: var(--text);
+      font-family: var(--mono); font-size: 12px;
+      text-align: right; padding: 4px 6px; color: var(--text);
     }
     .cmp-school-row .cmp-lbl { color: var(--text); font-weight: 600; }
     .cmp-school-row .cmp-val { font-size: 13px; font-weight: 500; }
-    .cmp-sep td { height: 6px; }
-    .cmp-legend {
-      font-size: 10px;
-      color: var(--muted);
-      margin-top: 6px;
-    }
+    .cmp-sep td { height: 5px; }
+    .cmp-legend { font-size: 10px; color: var(--muted); margin-top: 6px; }
 
-    /* ── Empty states ── */
-    .empty-state {
-      text-align: center;
-      padding: 40px 20px;
-      color: var(--muted);
-    }
+    /* ── Empty ── */
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
     .empty-state svg {
-      width: 40px; height: 40px;
-      stroke: var(--border);
-      fill: none;
-      stroke-width: 1.5;
-      margin-bottom: 10px;
+      width: 40px; height: 40px; stroke: var(--border);
+      fill: none; stroke-width: 1.5; margin-bottom: 10px;
     }
     .empty-state p { font-size: 13px; }
 
@@ -273,8 +179,13 @@
   </div>
   <div>
     <h1>Équipement numérique</h1>
-    <p>Rechercher une école par UAI ou nom</p>
+    <p id="headerSub">Rechercher une école par UAI ou nom</p>
   </div>
+</div>
+
+<div class="toggle-row">
+  <button class="toggle-btn active" id="btnEcoles" onclick="switchMode('ecoles')">🏫 Écoles</button>
+  <button class="toggle-btn"        id="btnCircos" onclick="switchMode('circos')">📍 Circonscriptions</button>
 </div>
 
 <div class="search-wrap">
@@ -287,260 +198,357 @@
 
 <script>
   let allRecords = [];
+  let mode = 'ecoles';
   let expandedId = null;
   const MAX_RESULTS = 50;
 
-  /* ── Helpers ── */
-  function norm(s) {
-    return String(s ?? '').toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  /* ══ HELPERS ══ */
+  const norm    = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const escHtml = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  function fmt(v, dec = 1) {
+    const n = parseFloat(v);
+    if (v === null || v === undefined || v === '' || isNaN(n) || !isFinite(n)) return '—';
+    return n.toFixed(dec);
   }
 
-  function fmt(v) {
-    if (v === null || v === undefined || v === '' || isNaN(v)) return '—';
-    return Number(v).toFixed(1);
-  }
-
+  // Ratios ordi/tablette : ratio = élèves pour 1 appareil
+  // → élevé = beaucoup d'élèves par appareil = mal équipé = ROUGE
+  // → faible = peu d'élèves par appareil = bien équipé  = VERT
   function ratioColor(v, moy) {
-    if (isNaN(v)) return '';
-    if (moy && !isNaN(moy)) {
-      if (v >= moy * 1.1) return 'color-good';
-      if (v <= moy * 0.9) return 'color-bad';
-      return 'color-warn';
-    }
-    if (v >= 80) return 'color-good';
-    if (v >= 40) return 'color-warn';
-    return 'color-bad';
+    const n = parseFloat(v), m = parseFloat(moy);
+    if (isNaN(n) || !isFinite(n) || n <= 0) return '';
+    if (isNaN(m) || !isFinite(m) || m <= 0) return '';
+    if (n <= m * 0.9) return 'color-good';
+    if (n >= m * 1.1) return 'color-bad';
+    return 'color-warn';
+  }
+
+  // % projection : plus c'est élevé = mieux
+  function pctColor(v, moy) {
+    const n = parseFloat(v), m = parseFloat(moy);
+    if (isNaN(n) || !isFinite(n)) return '';
+    if (isNaN(m) || !isFinite(m)) return '';
+    if (n >= m * 1.1) return 'color-good';
+    if (n <= m * 0.9) return 'color-bad';
+    return 'color-warn';
   }
 
   function highlight(text, query) {
     if (!query) return escHtml(text);
-    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`(${escaped})`, 'gi');
+    const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
     return escHtml(text).replace(re, '<mark>$1</mark>');
   }
 
-  function escHtml(s) {
-    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-
-  /* ── Resolve column names (Grist may rename accented/special chars) ── */
-  function resolveField(rec, candidates) {
-    for (const c of candidates) {
-      if (rec[c] !== undefined) return rec[c];
-    }
+  function resolveField(rec, keys) {
+    for (const k of keys) if (rec[k] !== undefined) return rec[k];
     return null;
   }
 
+  function emptyState(msg) {
+    return `<div class="empty-state">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <p>${escHtml(msg)}</p></div>`;
+  }
+
+  /* ══ EXTRACT FIELDS ══ */
   function extractFields(rec) {
     return {
-      uai:            resolveField(rec, ['UAI','uai']),
-      nom:            resolveField(rec, ['Nom','nom','name']),
-      ville:          resolveField(rec, ['Ville','ville']),
-      dept:           resolveField(rec, ['D_partement__texte_','Département__texte_','departement','dept','Departement_texte_']),
-      circo:          resolveField(rec, ['LIB_CIRCO','lib_circo']),
-      nbEleves:       resolveField(rec, ['Nb_eleves','nb_eleves','Nb_Eleves']),
-      // Ordinateurs
-      ratio:          resolveField(rec, ['ratio_ordinateur']),
-      moyAcadOrdi:    resolveField(rec, ['Moy_acad_ratio_ordi']),
-      moyDeptOrdi:    resolveField(rec, ['Moy_depart_ratio_ordi']),
-      moyCircoOrdi:   resolveField(rec, ['Moy_circo_ratio_ordi']),
-      moyCommOrdi:    resolveField(rec, ['Moy_commune_ratio_ordi']),
-      // Tablettes
-      ratioTab:       resolveField(rec, ['ratio_tablette']),
-      moyAcadTab:     resolveField(rec, ['Moy_acad_ratio_tablette']),
-      moyDeptTab:     resolveField(rec, ['Moy_depart_ratio_tablette']),
-      moyCircoTab:    resolveField(rec, ['Moy_circo_ratio_tablette']),
-      moyCommTab:     resolveField(rec, ['Moy_commune_ratio_tablette']),
-      // Projection
-      pctProj:        resolveField(rec, ['pourcentage_equip_proj']),
-      moyAcadProj:    resolveField(rec, ['Moy_acad_pourcentage_equip_proj']),
-      moyDeptProj:    resolveField(rec, ['Moy_depart_pourcentage_equip_proj']),
-      moyCircoProj:   resolveField(rec, ['Moy_circo_pourcentage_equip_proj']),
-      moyCommProj:    resolveField(rec, ['Moy_commune_pourcentage_equip_proj']),
+      uai:          resolveField(rec, ['UAI','uai']),
+      nom:          resolveField(rec, ['Nom','nom','name']),
+      ville:        resolveField(rec, ['Ville','ville']),
+      dept:         resolveField(rec, ['Département','departement','Departement']),
+      deptTxt:      resolveField(rec, ['D_partement__texte_','Département__texte_','Departement_texte_']),
+      circo:        resolveField(rec, ['LIB_CIRCO','lib_circo']),
+      codeCirco:    resolveField(rec, ['CODECIRCO','codecirco']),
+      // Ordinateurs — ratio = nb élèves pour 1 ordinateur
+      ratio:        resolveField(rec, ['ratio_ordinateur']),
+      moyAcadOrdi:  resolveField(rec, ['Moy_acad_ratio_ordi']),
+      moyDeptOrdi:  resolveField(rec, ['Moy_depart_ratio_ordi']),
+      moyCircoOrdi: resolveField(rec, ['Moy_circo_ratio_ordi']),
+      moyCommOrdi:  resolveField(rec, ['Moy_commune_ratio_ordi']),
+      // Tablettes — ratio = nb élèves pour 1 tablette
+      ratioTab:     resolveField(rec, ['ratio_tablette']),
+      moyAcadTab:   resolveField(rec, ['Moy_acad_ratio_tablette']),
+      moyDeptTab:   resolveField(rec, ['Moy_depart_ratio_tablette']),
+      moyCircoTab:  resolveField(rec, ['Moy_circo_ratio_tablette']),
+      moyCommTab:   resolveField(rec, ['Moy_commune_ratio_tablette']),
+      // Projection — % classes équipées
+      pctProj:      resolveField(rec, ['pourcentage_equip_proj']),
+      moyAcadProj:  resolveField(rec, ['Moy_acad_pourcentage_equip_proj']),
+      moyDeptProj:  resolveField(rec, ['Moy_depart_pourcentage_equip_proj']),
+      moyCircoProj: resolveField(rec, ['Moy_circo_pourcentage_equip_proj']),
+      moyCommProj:  resolveField(rec, ['Moy_commune_pourcentage_equip_proj']),
     };
   }
 
-  /* ── Render ── */
-  function render(query) {
-    const q = norm(query.trim());
-    const results = document.getElementById('results');
-    const status  = document.getElementById('status');
+  /* ══ METRIC TILE ══ */
+  function metricTile(icon, label, value, colorClass, subLine, isActive) {
+    const v = parseFloat(value);
+    const valStr = (isNaN(v) || !isFinite(v)) ? '—' : fmt(v);
+    return `<div class="metric-tile ${isActive ? 'active-card' : ''}">
+      <div class="mt-icon-label">
+        <span class="mt-icon">${icon}</span>
+        <span class="mt-label">${label}</span>
+      </div>
+      <div class="mt-value ${colorClass}">${valStr}</div>
+      <div class="mt-sub">${subLine ? escHtml(subLine) : '&nbsp;'}</div>
+    </div>`;
+  }
 
-    if (!allRecords.length) {
-      status.textContent = 'Aucune donnée disponible.';
-      results.innerHTML = '';
-      return;
+  /* ══ COMPARISON TABLE ══ */
+  function cmpTable(valOrdi, valTab, valProj, refDeptOrdi, refDeptTab, refDeptProj, rows) {
+    const schoolRow = `
+      <tr class="cmp-school-row">
+        <td class="cmp-lbl">Valeur</td>
+        <td class="cmp-val ${ratioColor(valOrdi, refDeptOrdi)}">${fmt(valOrdi)}</td>
+        <td class="cmp-val ${ratioColor(valTab,  refDeptTab)}">${fmt(valTab)}</td>
+        <td class="cmp-val ${pctColor(valProj,   refDeptProj)}">${fmt(valProj)}</td>
+      </tr>
+      <tr class="cmp-sep"><td colspan="4"></td></tr>`;
+
+    const dataRows = rows.map(r => `
+      <tr>
+        <td class="cmp-lbl" title="${escHtml(r.label)}">${escHtml(r.label)}</td>
+        <td class="cmp-val">${fmt(r.ordi)}</td>
+        <td class="cmp-val">${fmt(r.tab)}</td>
+        <td class="cmp-val">${fmt(r.proj)}</td>
+      </tr>`).join('');
+
+    return `<div class="cmp-section">
+      <div class="cmp-title">Comparaison aux moyennes</div>
+      <table class="cmp-table">
+        <thead><tr>
+          <th></th><th>💻 Ordi</th><th>📱 Tablette</th><th>📽️ Proj.</th>
+        </tr></thead>
+        <tbody>${schoolRow}${dataRows}</tbody>
+      </table>
+      <div class="cmp-legend">
+        Ordi &amp; tablettes : <span class="color-good">■</span> bien équipé
+        &nbsp;<span class="color-bad">■</span> sous-équipé<br>
+        Projection : <span class="color-good">■</span> au-dessus
+        &nbsp;<span class="color-bad">■</span> en-dessous de la moy. dépt
+      </div>
+    </div>`;
+  }
+
+  /* ══ BUILD CIRCO MAP ══ */
+  function buildCircoMap() {
+    const map = new Map();
+    for (const rec of allRecords) {
+      const f = extractFields(rec);
+      const key = String(f.circo ?? '').trim();
+      if (!key || map.has(key)) continue;
+      map.set(key, {
+        id: key, nom: key,
+        code:    String(f.codeCirco ?? '').trim(),
+        dept:    f.dept,
+        deptTxt: f.deptTxt,
+        moyOrdi:     f.moyCircoOrdi,  moyAcadOrdi:  f.moyAcadOrdi,  moyDeptOrdi:  f.moyDeptOrdi,
+        moyTab:      f.moyCircoTab,   moyAcadTab:   f.moyAcadTab,   moyDeptTab:   f.moyDeptTab,
+        moyProj:     f.moyCircoProj,  moyAcadProj:  f.moyAcadProj,  moyDeptProj:  f.moyDeptProj,
+      });
     }
+    return map;
+  }
 
-    // Filter
-    let filtered = q === ''
+  /* ══ RENDER ÉCOLES ══ */
+  function renderEcoles(query) {
+    const q = norm(query.trim());
+    const filtered = q === ''
       ? allRecords.slice(0, MAX_RESULTS)
       : allRecords.filter(r => {
           const f = extractFields(r);
           return norm(f.uai).includes(q) || norm(f.nom).includes(q);
         }).slice(0, MAX_RESULTS);
 
-    status.textContent = q === ''
+    document.getElementById('status').textContent = q === ''
       ? `${allRecords.length} écoles • tapez pour filtrer`
-      : `${filtered.length} résultat${filtered.length > 1 ? 's' : ''} pour « ${query} »`;
+      : `${filtered.length} résultat${filtered.length !== 1 ? 's' : ''} pour « ${query} »`;
 
-    if (!filtered.length) {
-      results.innerHTML = `
-        <div class="empty-state">
-          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          <p>Aucune école trouvée</p>
-        </div>`;
-      return;
-    }
+    if (!filtered.length) { document.getElementById('results').innerHTML = emptyState('Aucune école trouvée'); return; }
 
-    results.innerHTML = filtered.map(rec => {
+    document.getElementById('results').innerHTML = filtered.map(rec => {
       const f = extractFields(rec);
       const id = rec.id;
-      const ratio    = parseFloat(f.ratio);
-      const ratioTab = parseFloat(f.ratioTab);
-      const pctProj  = parseFloat(f.pctProj);
-      const isExpanded = expandedId === id;
-      const nomClean = String(f.nom ?? '').trim();
-      const uaiStr   = String(f.uai ?? '').trim();
+      const ordi = parseFloat(f.ratio);
+      const tab  = parseFloat(f.ratioTab);
+      const proj = parseFloat(f.pctProj);
+      const active = expandedId === id;
 
-      function elevesFor1(r) {
-        const v = parseFloat(r);
-        if (!v || isNaN(v) || v === 0) return null;
-        return Math.round(100 / v);
-      }
+      // Sub-texts : ratio est déjà le nb d'élèves pour 1 appareil
+      const sub1 = isFinite(ordi) ? `1 ordinateur pour ${fmt(ordi, 0)} élève${ordi > 1 ? 's' : ''}` : null;
+      const sub2 = isFinite(tab) && tab > 0 ? `1 tablette pour ${fmt(tab, 0)} élève${tab > 1 ? 's' : ''}` : (tab === 0 ? 'Aucune tablette' : null);
+      const sub3 = isFinite(proj) ? `moy. dépt : ${fmt(f.moyDeptProj)}%` : null;
 
-      function metricTile(icon, label, value, colorClass, subLine) {
-        const valStr = (value === null || value === undefined || isNaN(value)) ? '—' : fmt(value);
-        return `
-          <div class="metric-tile ${isExpanded ? 'active' : ''}">
-            <div class="mt-icon-label">
-              <span class="mt-icon">${icon}</span>
-              <span class="mt-label">${label}</span>
-            </div>
-            <div class="mt-value ${colorClass}">${valStr}</div>
-            ${subLine ? `<div class="mt-sub">${subLine}</div>` : '<div class="mt-sub">&nbsp;</div>'}
-          </div>`;
-      }
+      const tiles =
+        metricTile('💻', 'Ordinateurs',  isFinite(ordi)?ordi:null, ratioColor(ordi, f.moyDeptOrdi), sub1, active) +
+        metricTile('📱', 'Tablettes',    isFinite(tab)&&tab>0?tab:null, ratioColor(tab, f.moyDeptTab), sub2, active) +
+        metricTile('📽️', '% Projection', isFinite(proj)?proj:null, pctColor(proj, f.moyDeptProj),    sub3, active);
 
-      const n1 = elevesFor1(ratio);
-      const n2 = elevesFor1(ratioTab);
+      const detail = active ? cmpTable(
+        ordi, tab, proj,
+        f.moyDeptOrdi, f.moyDeptTab, f.moyDeptProj,
+        [
+          { label: 'Académie',               ordi: f.moyAcadOrdi,  tab: f.moyAcadTab,  proj: f.moyAcadProj  },
+          { label: 'Département',            ordi: f.moyDeptOrdi,  tab: f.moyDeptTab,  proj: f.moyDeptProj  },
+          { label: f.circo  || 'Circo',      ordi: f.moyCircoOrdi, tab: f.moyCircoTab, proj: f.moyCircoProj },
+          { label: f.ville  || 'Commune',    ordi: f.moyCommOrdi,  tab: f.moyCommTab,  proj: f.moyCommProj  },
+        ]
+      ) : '';
 
-      const tile1 = metricTile('💻', 'Ordinateurs',  ratio,    ratioColor(ratio,    parseFloat(f.moyDeptOrdi)), n1 ? `${n1} élève${n1>1?'s':''} pour 1 ordi` : null);
-      const tile2 = metricTile('📱', 'Tablettes',    ratioTab, ratioColor(ratioTab, parseFloat(f.moyDeptTab)),  n2 ? `${n2} élève${n2>1?'s':''} pour 1 tablette` : null);
-      const tile3 = metricTile('📽️', '% Projection', isNaN(pctProj)?null:pctProj, ratioColor(pctProj, parseFloat(f.moyDeptProj)), !isNaN(pctProj) ? `moy. dépt : ${fmt(f.moyDeptProj)}%` : null);
-
-      // ── Comparison table (expanded) ──
-      function cmpRow(label, vOrdi, vTab, vProj) {
-        return `
-          <tr>
-            <td class="cmp-lbl">${label}</td>
-            <td class="cmp-val">${fmt(vOrdi)}</td>
-            <td class="cmp-val">${fmt(vTab)}</td>
-            <td class="cmp-val">${fmt(vProj)}</td>
-          </tr>`;
-      }
-
-      const circoLabel = f.circo ? escHtml(String(f.circo)) : 'Circonscription';
-      const villeLabel = f.ville  ? escHtml(String(f.ville))  : 'Commune';
-
-      const detailHtml = isExpanded ? `
-        <div class="cmp-section">
-          <div class="cmp-title">Comparaison aux moyennes</div>
-          <table class="cmp-table">
-            <thead>
-              <tr>
-                <th></th>
-                <th>💻 Ordi</th>
-                <th>📱 Tablette</th>
-                <th>📽️ Proj.</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="cmp-school-row">
-                <td class="cmp-lbl">Cette école</td>
-                <td class="cmp-val ${ratioColor(ratio,    parseFloat(f.moyDeptOrdi))}">${fmt(ratio)}</td>
-                <td class="cmp-val ${ratioColor(ratioTab, parseFloat(f.moyDeptTab))}">${fmt(ratioTab)}</td>
-                <td class="cmp-val ${ratioColor(pctProj,  parseFloat(f.moyDeptProj))}">${fmt(pctProj)}</td>
-              </tr>
-              <tr class="cmp-sep"><td colspan="4"></td></tr>
-              ${cmpRow('Académie',       f.moyAcadOrdi,  f.moyAcadTab,   f.moyAcadProj)}
-              ${cmpRow('Département',    f.moyDeptOrdi,  f.moyDeptTab,   f.moyDeptProj)}
-              ${cmpRow(circoLabel,       f.moyCircoOrdi, f.moyCircoTab,  f.moyCircoProj)}
-              ${cmpRow(villeLabel,       f.moyCommOrdi,  f.moyCommTab,   f.moyCommProj)}
-            </tbody>
-          </table>
-          <div class="cmp-legend">
-            <span class="color-good">■</span> au-dessus de la moy. dépt &nbsp;
-            <span class="color-warn">■</span> proche &nbsp;
-            <span class="color-bad">■</span> en-dessous
-          </div>
+      return `<div class="result-card${active ? ' active' : ''}" data-id="${id}">
+        <div class="card-name">${highlight(String(f.nom ?? '').trim(), query)}</div>
+        <div class="card-sub">
+          <span class="tag-uai">${escHtml(String(f.uai ?? '').trim())}</span>
+          <span>${escHtml(String(f.ville ?? ''))}</span>
+          ${f.deptTxt ? `<span class="tag-dept">${escHtml(String(f.deptTxt))}</span>` : ''}
+          ${f.circo   ? `<span>${escHtml(String(f.circo))}</span>` : ''}
         </div>
-      ` : '';
-
-      return `
-        <div class="result-card ${isExpanded ? 'active' : ''}" data-id="${id}">
-          <div class="card-top">
-            <div class="card-meta">
-              <div class="card-name">${highlight(nomClean, query)}</div>
-              <div class="card-sub">
-                <span class="tag-uai">${escHtml(uaiStr)}</span>
-                <span>${escHtml(String(f.ville ?? ''))}</span>
-                ${f.dept ? `<span>${escHtml(String(f.dept))}</span>` : ''}
-                ${f.circo ? `<span>${escHtml(String(f.circo))}</span>` : ''}
-              </div>
-            </div>
-          </div>
-          <div class="metrics-row">
-            ${tile1}${tile2}${tile3}
-          </div>
-          ${detailHtml}
-        </div>`;
+        <div class="metrics-row">${tiles}</div>
+        ${detail}
+      </div>`;
     }).join('');
 
-    // Click handlers
-    results.querySelectorAll('.result-card').forEach(card => {
+    bindClicks();
+  }
+
+  /* ══ RENDER CIRCOS ══ */
+  function renderCircos(query) {
+    const q = norm(query.trim());
+    const circoMap  = buildCircoMap();
+    const allCircos = Array.from(circoMap.values());
+
+    const filtered = q === ''
+      ? allCircos.slice(0, MAX_RESULTS)
+      : allCircos.filter(c => norm(c.nom).includes(q) || norm(c.code).includes(q))
+                 .slice(0, MAX_RESULTS);
+
+    document.getElementById('status').textContent = q === ''
+      ? `${allCircos.length} circonscriptions • tapez pour filtrer`
+      : `${filtered.length} résultat${filtered.length !== 1 ? 's' : ''} pour « ${query} »`;
+
+    if (!filtered.length) { document.getElementById('results').innerHTML = emptyState('Aucune circonscription trouvée'); return; }
+
+    document.getElementById('results').innerHTML = filtered.map(c => {
+      const id     = c.id;
+      const ordi   = parseFloat(c.moyOrdi);
+      const tab    = parseFloat(c.moyTab);
+      const proj   = parseFloat(c.moyProj);
+      const active = expandedId === id;
+
+      const sub1 = isFinite(ordi) ? `1 ordinateur pour ${fmt(ordi, 0)} élève${ordi > 1 ? 's' : ''}` : null;
+      const sub2 = isFinite(tab) && tab > 0 ? `1 tablette pour ${fmt(tab, 0)} élève${tab > 1 ? 's' : ''}` : (tab === 0 ? 'Aucune tablette' : null);
+      const sub3 = isFinite(proj) ? `moy. acad. : ${fmt(c.moyAcadProj)}%` : null;
+
+      const tiles =
+        metricTile('💻', 'Ordi moy.',     isFinite(ordi)?ordi:null, ratioColor(ordi, c.moyDeptOrdi), sub1, active) +
+        metricTile('📱', 'Tablette moy.', isFinite(tab)&&tab>0?tab:null, ratioColor(tab, c.moyDeptTab), sub2, active) +
+        metricTile('📽️', '% Proj. moy.',  isFinite(proj)?proj:null, pctColor(proj,   c.moyDeptProj), sub3, active);
+
+      let detail = '';
+      if (active) {
+        // Autres circos du même département
+        const peers = allCircos
+          .filter(o => String(o.dept) === String(c.dept) && o.id !== c.id)
+          .map(o => ({ label: o.nom, ordi: o.moyOrdi, tab: o.moyTab, proj: o.moyProj }));
+
+        detail = cmpTable(
+          ordi, tab, proj,
+          c.moyDeptOrdi, c.moyDeptTab, c.moyDeptProj,
+          [
+            { label: 'Académie',    ordi: c.moyAcadOrdi, tab: c.moyAcadTab, proj: c.moyAcadProj },
+            { label: 'Département', ordi: c.moyDeptOrdi, tab: c.moyDeptTab, proj: c.moyDeptProj },
+            ...peers,
+          ]
+        );
+      }
+
+      return `<div class="result-card${active ? ' active' : ''}" data-id="${escHtml(id)}">
+        <div class="card-name">${highlight(c.nom, query)}</div>
+        <div class="card-sub">
+          ${c.code   ? `<span class="tag-uai">${escHtml(c.code)}</span>` : ''}
+          ${c.deptTxt ? `<span class="tag-dept">${escHtml(String(c.deptTxt))}</span>` : ''}
+        </div>
+        <div class="metrics-row">${tiles}</div>
+        ${detail}
+      </div>`;
+    }).join('');
+
+    bindClicks();
+  }
+
+  /* ══ DISPATCH ══ */
+  function render(query) {
+    if (mode === 'ecoles') renderEcoles(query);
+    else                   renderCircos(query);
+  }
+
+  function bindClicks() {
+    document.querySelectorAll('.result-card').forEach(card => {
       card.addEventListener('click', () => {
-        const id = parseInt(card.dataset.id);
-        expandedId = expandedId === id ? null : id;
+        const raw = card.dataset.id;
+        const id  = isNaN(raw) ? raw : parseInt(raw);
+        expandedId = (expandedId === id) ? null : id;
         render(document.getElementById('searchInput').value);
       });
     });
   }
 
-  /* ── Grist integration ── */
+  function switchMode(m) {
+    mode = m;
+    expandedId = null;
+    document.getElementById('btnEcoles').classList.toggle('active', m === 'ecoles');
+    document.getElementById('btnCircos').classList.toggle('active', m === 'circos');
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchInput').placeholder =
+      m === 'ecoles' ? 'Ex : 0280576Z ou Charlemagne…' : 'Ex : IEN Chartres 4…';
+    document.getElementById('headerSub').textContent =
+      m === 'ecoles' ? 'Rechercher une école par UAI ou nom'
+                     : 'Rechercher une circonscription';
+    render('');
+  }
+
+  /* ══ GRIST ══ */
   document.getElementById('searchInput').addEventListener('input', e => {
     expandedId = null;
     render(e.target.value);
   });
 
-  function onRecords(records) {
-    allRecords = records;
-    render(document.getElementById('searchInput').value);
-  }
-
   if (typeof grist !== 'undefined') {
     grist.ready({ requiredAccess: 'read table' });
-    grist.onRecords(onRecords);
+    grist.onRecords(records => {
+      allRecords = records;
+      render(document.getElementById('searchInput').value);
+    });
   } else {
-    // Développement hors Grist : données fictives
+    // ── Démo hors Grist ──
     document.getElementById('status').textContent = 'Mode démo (hors Grist)';
     allRecords = [
-      { id: 1, UAI: '0280576Z', Nom: ' Ecole primaire Charlemagne - Saint-Martin-de-Nigelles', Ville: 'ST MARTIN DE NIGELLES', LIB_CIRCO: 'IEN CHARTRES 4',
-        ratio_ordinateur: 4.0,  Moy_acad_ratio_ordi: 16.0, Moy_depart_ratio_ordi: 17.0, Moy_circo_ratio_ordi: 14.0, Moy_commune_ratio_ordi: 4.0,
-        ratio_tablette: 25.0,   Moy_acad_ratio_tablette: 18.0, Moy_depart_ratio_tablette: 17.0, Moy_circo_ratio_tablette: 20.0, Moy_commune_ratio_tablette: 25.0,
-        pourcentage_equip_proj: 100.0, Moy_acad_pourcentage_equip_proj: 88.0, Moy_depart_pourcentage_equip_proj: 93.0, Moy_circo_pourcentage_equip_proj: 84.0, Moy_commune_pourcentage_equip_proj: 100.0,
-        Nb_eleves: 130 },
-      { id: 2, UAI: '0280580D', Nom: ' Ecole primaire - Villiers-le-Morhier', Ville: 'VILLIERS LE MORHIER', LIB_CIRCO: 'IEN CHARTRES 4',
-        ratio_ordinateur: 33.0, Moy_acad_ratio_ordi: 16.0, Moy_depart_ratio_ordi: 17.0, Moy_circo_ratio_ordi: 14.0, Moy_commune_ratio_ordi: 33.0,
-        ratio_tablette: 0.0,    Moy_acad_ratio_tablette: 18.0, Moy_depart_ratio_tablette: 17.0, Moy_circo_ratio_tablette: 20.0, Moy_commune_ratio_tablette: 0.0,
-        pourcentage_equip_proj: 120.0, Moy_acad_pourcentage_equip_proj: 88.0, Moy_depart_pourcentage_equip_proj: 93.0, Moy_circo_pourcentage_equip_proj: 84.0, Moy_commune_pourcentage_equip_proj: 120.0,
-        Nb_eleves: 126 },
-      { id: 3, UAI: '0280910M', Nom: ' Ecole élémentaire Emile Pottier - Gallardon', Ville: 'GALLARDON', LIB_CIRCO: 'IEN CHARTRES 4',
-        ratio_ordinateur: 4.0,  Moy_acad_ratio_ordi: 16.0, Moy_depart_ratio_ordi: 17.0, Moy_circo_ratio_ordi: 14.0, Moy_commune_ratio_ordi: 4.0,
-        ratio_tablette: 7.0,    Moy_acad_ratio_tablette: 18.0, Moy_depart_ratio_tablette: 17.0, Moy_circo_ratio_tablette: 20.0, Moy_commune_ratio_tablette: 7.0,
-        pourcentage_equip_proj: 100.0, Moy_acad_pourcentage_equip_proj: 88.0, Moy_depart_pourcentage_equip_proj: 93.0, Moy_circo_pourcentage_equip_proj: 84.0, Moy_commune_pourcentage_equip_proj: 100.0,
-        Nb_eleves: 197 },
+      { id:1, UAI:'0280576Z', Nom:' Ecole primaire Charlemagne - Saint-Martin-de-Nigelles',
+        Ville:'ST MARTIN DE NIGELLES', Département:28, D_partement__texte_:'Eure-et-Loir',
+        LIB_CIRCO:'IEN CHARTRES 4', CODECIRCO:'0280050C',
+        ratio_ordinateur:4.0, Moy_acad_ratio_ordi:16.0, Moy_depart_ratio_ordi:17.0, Moy_circo_ratio_ordi:14.0, Moy_commune_ratio_ordi:4.0,
+        ratio_tablette:12.0,  Moy_acad_ratio_tablette:18.0, Moy_depart_ratio_tablette:17.0, Moy_circo_ratio_tablette:20.0, Moy_commune_ratio_tablette:12.0,
+        pourcentage_equip_proj:100.0, Moy_acad_pourcentage_equip_proj:88.0, Moy_depart_pourcentage_equip_proj:93.0, Moy_circo_pourcentage_equip_proj:84.0, Moy_commune_pourcentage_equip_proj:100.0 },
+      { id:2, UAI:'0280580D', Nom:' Ecole primaire - Villiers-le-Morhier',
+        Ville:'VILLIERS LE MORHIER', Département:28, D_partement__texte_:'Eure-et-Loir',
+        LIB_CIRCO:'IEN CHARTRES 4', CODECIRCO:'0280050C',
+        ratio_ordinateur:3.0, Moy_acad_ratio_ordi:16.0, Moy_depart_ratio_ordi:17.0, Moy_circo_ratio_ordi:14.0, Moy_commune_ratio_ordi:3.0,
+        ratio_tablette:0.0,   Moy_acad_ratio_tablette:18.0, Moy_depart_ratio_tablette:17.0, Moy_circo_ratio_tablette:20.0, Moy_commune_ratio_tablette:0.0,
+        pourcentage_equip_proj:120.0, Moy_acad_pourcentage_equip_proj:88.0, Moy_depart_pourcentage_equip_proj:93.0, Moy_circo_pourcentage_equip_proj:84.0, Moy_commune_pourcentage_equip_proj:120.0 },
+      { id:3, UAI:'0280910M', Nom:' Ecole élémentaire Emile Pottier - Gallardon',
+        Ville:'GALLARDON', Département:28, D_partement__texte_:'Eure-et-Loir',
+        LIB_CIRCO:'IEN CHARTRES 5', CODECIRCO:'0280051D',
+        ratio_ordinateur:25.0, Moy_acad_ratio_ordi:16.0, Moy_depart_ratio_ordi:17.0, Moy_circo_ratio_ordi:22.0, Moy_commune_ratio_ordi:25.0,
+        ratio_tablette:8.0,    Moy_acad_ratio_tablette:18.0, Moy_depart_ratio_tablette:17.0, Moy_circo_ratio_tablette:15.0, Moy_commune_ratio_tablette:8.0,
+        pourcentage_equip_proj:75.0, Moy_acad_pourcentage_equip_proj:88.0, Moy_depart_pourcentage_equip_proj:93.0, Moy_circo_pourcentage_equip_proj:70.0, Moy_commune_pourcentage_equip_proj:75.0 },
+      { id:4, UAI:'0450001A', Nom:' Ecole élémentaire Jean Zay - Orléans',
+        Ville:'ORLÉANS', Département:45, D_partement__texte_:'Loiret',
+        LIB_CIRCO:'IEN ORLÉANS 1', CODECIRCO:'0450010A',
+        ratio_ordinateur:8.0, Moy_acad_ratio_ordi:16.0, Moy_depart_ratio_ordi:15.0, Moy_circo_ratio_ordi:10.0, Moy_commune_ratio_ordi:9.0,
+        ratio_tablette:5.0,   Moy_acad_ratio_tablette:18.0, Moy_depart_ratio_tablette:16.0, Moy_circo_ratio_tablette:12.0, Moy_commune_ratio_tablette:6.0,
+        pourcentage_equip_proj:110.0, Moy_acad_pourcentage_equip_proj:88.0, Moy_depart_pourcentage_equip_proj:95.0, Moy_circo_pourcentage_equip_proj:105.0, Moy_commune_pourcentage_equip_proj:110.0 },
     ];
     render('');
   }
