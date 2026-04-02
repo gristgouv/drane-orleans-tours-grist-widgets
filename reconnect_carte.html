@@ -172,6 +172,7 @@
       <span class="leg"><span class="leg-dot" style="background:var(--p1)"></span>Très prioritaire</span>
       <span class="leg"><span class="leg-dot" style="background:var(--p2)"></span>Prioritaire</span>
       <span class="leg"><span class="leg-dot" style="background:var(--p3)"></span>Moins prioritaire</span>
+      <span class="leg"><span class="leg-dot" style="background:linear-gradient(to right,#dc2626,#d97706,#16a34a);border-radius:3px;width:28px;height:10px"></span>Collèges (dégradé)</span>
     </div>
     <span id="counter">—</span>
   </div>
@@ -350,6 +351,10 @@
       return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null;
     };
 
+    const total = college.ecoles.length;
+    const pct1 = total ? (college.p1||counts.p1)/total*100 : 0;
+    const pct2 = total ? (college.p2||counts.p2)/total*100 : 0;
+    const pct3 = total ? (college.p3||counts.p3)/total*100 : 0;
     document.getElementById('card-header').innerHTML = `
       <div class="card-type">🏛️ Collège</div>
       <div class="card-name">${escHtml(college.nomC||'—')}</div>
@@ -357,10 +362,17 @@
         <span class="tag-uai">${escHtml(college.uaiC)}</span>
         <span>${college.ecoles.length} école${college.ecoles.length>1?'s':''}</span>
       </div>
-      <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
-        ${counts.p1?`<span class="badge badge-p1">🔴 ×${counts.p1}</span>`:''}
-        ${counts.p2?`<span class="badge badge-p2">🟡 ×${counts.p2}</span>`:''}
-        ${counts.p3?`<span class="badge badge-p3">🟢 ×${counts.p3}</span>`:''}
+      <div style="margin-top:8px">
+        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;gap:1px">
+          ${pct1>0?`<div style="width:${pct1}%;background:#dc2626" title="Très prioritaire : ${counts.p1}"></div>`:''}
+          ${pct2>0?`<div style="width:${pct2}%;background:#d97706" title="Prioritaire : ${counts.p2}"></div>`:''}
+          ${pct3>0?`<div style="width:${pct3}%;background:#16a34a" title="Moins prioritaire : ${counts.p3}"></div>`:''}
+        </div>
+        <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
+          ${counts.p1?`<span class="badge badge-p1">🔴 ×${counts.p1}</span>`:''}
+          ${counts.p2?`<span class="badge badge-p2">🟡 ×${counts.p2}</span>`:''}
+          ${counts.p3?`<span class="badge badge-p3">🟢 ×${counts.p3}</span>`:''}
+        </div>
       </div>`;
 
     const schoolItems = college.ecoles.map(r => `
@@ -400,12 +412,16 @@
     maxZoom: 19,
   }).addTo(map);
 
-  function markerIcon(cls, isCollege) {
+  function markerIcon(clsOrColor, isCollege) {
+    // Pour les collèges, clsOrColor est une couleur hex ; pour les écoles c'est une classe CSS
+    const styleOrClass = isCollege
+      ? `style="background:${clsOrColor};width:20px;height:20px;border-radius:50%;border:2.5px solid #1e293b;box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:pointer"`
+      : `class="mk mk-${clsOrColor}"`;
     return L.divIcon({
       className: '',
-      html: `<div class="mk mk-${cls}${isCollege?' mk-college':''}"></div>`,
-      iconSize: [isCollege?18:14, isCollege?18:14],
-      iconAnchor: [isCollege?9:7, isCollege?9:7],
+      html: `<div ${styleOrClass}></div>`,
+      iconSize: [isCollege?20:14, isCollege?20:14],
+      iconAnchor: [isCollege?10:7, isCollege?10:7],
     });
   }
 
@@ -414,6 +430,26 @@
     markers = [];
     selectedMarker = null;
     closeCard();
+  }
+
+  /* ════ DÉGRADÉ COULEUR COLLÈGE ════ */
+  // score 0 (tout rouge) → 0.5 (tout orange) → 1 (tout vert)
+  // Interpolation rouge→orange→vert
+  function lerpColor(a, b, t) {
+    const ah = parseInt(a.slice(1),16), bh = parseInt(b.slice(1),16);
+    const ar = (ah>>16)&255, ag = (ah>>8)&255, ab = ah&255;
+    const br = (bh>>16)&255, bg = (bh>>8)&255, bb = bh&255;
+    const r = Math.round(ar + (br-ar)*t);
+    const g = Math.round(ag + (bg-ag)*t);
+    const bv= Math.round(ab + (bb-ab)*t);
+    return '#' + [r,g,bv].map(x=>x.toString(16).padStart(2,'0')).join('');
+  }
+
+  function scoreToColor(score) {
+    // 0=rouge, 0.5=orange, 1=vert
+    const RED = '#dc2626', ORANGE = '#d97706', GREEN = '#16a34a';
+    if (score <= 0.5) return lerpColor(RED, ORANGE, score * 2);
+    return lerpColor(ORANGE, GREEN, (score - 0.5) * 2);
   }
 
   /* ════ BUILD COLLEGE MAP ════ */
@@ -427,14 +463,18 @@
       }
       const c = map_.get(uaiC);
       c.ecoles.push(rec);
-      // Prendre les coordonnées dès qu'on trouve une valeur non-nulle dans n'importe quel record du groupe
       if (c.lat === null) c.lat = findCollegeCoord(rec, 'lat');
       if (c.lng === null) c.lng = findCollegeCoord(rec, 'lng');
     }
     for (const c of map_.values()) {
+      const total = c.ecoles.length;
       const p1 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p1').length;
       const p2 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p2').length;
-      c.priorityCls = p1 > 0 ? 'p1' : p2 > 0 ? 'p2' : 'p3';
+      const p3 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p3').length;
+      // score : p3=1 (vert), p2=0.5 (orange), p1=0 (rouge)
+      const score = total > 0 ? (p3 * 1 + p2 * 0.5 + p1 * 0) / total : 0.5;
+      c.p1 = p1; c.p2 = p2; c.p3 = p3;
+      c.gradientColor = scoreToColor(score);
     }
     return map_;
   }
@@ -473,72 +513,29 @@
         `${filtered.length} école${filtered.length!==1?'s':''} affichée${filtered.length!==1?'s':''}`;
 
     } else {
-      // Mode collège — diagnostic complet à chaque étape
+      // Mode collège
       const collegeMap = buildCollegeMap();
-      const allColleges = Array.from(collegeMap.values());
-      const withCoords  = allColleges.filter(c => c.lat !== null && c.lng !== null);
-      const filtered    = allColleges.filter(c => {
+      const filtered = Array.from(collegeMap.values()).filter(c => {
         if (!q) return true;
         return norm(c.nomC).includes(q) || norm(c.uaiC).includes(q);
       });
-      const filteredWithCoords = filtered.filter(c => c.lat !== null && c.lng !== null);
 
-      filteredWithCoords.forEach(college => {
-        try {
-          const m = L.marker([college.lat, college.lng], { icon: markerIcon(college.priorityCls, true) }).addTo(map);
-          m._college = college;
-          m.on('click', () => {
-            if (selectedMarker) selectedMarker._icon?.classList.remove('selected');
-            selectedMarker = m;
-            m._icon?.classList.add('selected');
-            renderCollegeCard(college);
-            openCard();
-          });
-          markers.push(m);
-        } catch(e) {
-          console.error('Marker error:', college.uaiC, college.lat, college.lng, e);
-        }
+      filtered.forEach(college => {
+        if (college.lat === null || college.lng === null) return;
+        const m = L.marker([college.lat, college.lng], { icon: markerIcon(college.gradientColor, true) }).addTo(map);
+        m._college = college;
+        m.on('click', () => {
+          if (selectedMarker) selectedMarker._icon?.classList.remove('selected');
+          selectedMarker = m;
+          m._icon?.classList.add('selected');
+          renderCollegeCard(college);
+          openCard();
+        });
+        markers.push(m);
       });
 
-      // Diagnostic visible
-      const rec0 = allRecords[0] || {};
-      const diag = {
-        totalRecords:    allRecords.length,
-        totalColleges:   allColleges.length,
-        avecCoords:      withCoords.length,
-        sansCoords:      allColleges.length - withCoords.length,
-        marqueursPoses:  markers.length,
-        // Premier record : valeurs brutes des colonnes coordonnées
-        college_latitude_raw:  rec0.college_latitude,
-        college_longitude_raw: rec0.college_longitude,
-        findLat:         allRecords.length ? findCollegeCoord(rec0, 'lat') : 'n/a',
-        findLng:         allRecords.length ? findCollegeCoord(rec0, 'lng') : 'n/a',
-        allKeys:         Object.keys(rec0).join(', '),
-      };
-      console.log('[CollègeMode]', diag);
-
-      const msg = markers.length > 0
-        ? `${markers.length} collège${markers.length>1?'s':''} affiché${markers.length>1?'s':''}`
-        : `⚠️ 0 affiché · ${allColleges.length} collèges · ${withCoords.length} avec coords`;
-      document.getElementById('counter').textContent = msg;
-
-      // Panneau diagnostic visible si aucun marqueur
-      if (markers.length === 0 && allColleges.length > 0) {
-        const oldDiag = document.getElementById('diag-panel');
-        if (oldDiag) oldDiag.remove();
-        const rows = Object.entries(diag).map(([k,v]) =>
-          `<tr><td style="color:#64748b;padding-right:10px">${k}</td><td style="font-weight:600;word-break:break-all">${v}</td></tr>`
-        ).join('');
-        document.getElementById('map').insertAdjacentHTML('afterbegin',
-          `<div id="diag-panel" style="position:absolute;top:10px;left:10px;z-index:999;background:#fff;border:2px solid #f59e0b;border-radius:8px;padding:14px;max-width:480px;font-size:11px;font-family:monospace;box-shadow:0 4px 16px rgba(0,0,0,.2);max-height:80vh;overflow-y:auto">
-            <strong style="font-size:12px">🔍 Diagnostic collèges</strong>
-            <table style="margin-top:8px;border-collapse:collapse">${rows}</table>
-            <div style="margin-top:8px;color:#64748b">Cliquez sur le fond pour fermer</div>
-          </div>`
-        );
-        document.getElementById('diag-panel').onclick = e => { e.stopPropagation(); };
-        document.getElementById('map').onclick = () => { const d = document.getElementById('diag-panel'); if(d) d.remove(); };
-      }
+      document.getElementById('counter').textContent =
+        `${markers.length} collège${markers.length!==1?'s':''} affiché${markers.length!==1?'s':''}`;
     }
 
     // Ajuster la vue sur les marqueurs visibles
