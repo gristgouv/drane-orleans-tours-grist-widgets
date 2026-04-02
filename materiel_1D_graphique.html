@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Comparaison Circonscriptions</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #f4f6f9;
+      --surface:  #ffffff;
+      --border:   #e2e6ed;
+      --accent:   #2563eb;
+      --aclt:     #dbeafe;
+      --good:     #16a34a;
+      --good-lt:  rgba(22,163,74,.15);
+      --warn:     #d97706;
+      --warn-lt:  rgba(217,119,6,.15);
+      --bad:      #dc2626;
+      --bad-lt:   rgba(220,38,38,.15);
+      --avg:      #7c3aed;
+      --text:     #1e293b;
+      --muted:    #64748b;
+      --mono:     'DM Mono', monospace;
+      --sans:     'DM Sans', sans-serif;
+      --r:        10px;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px;
+      font-size: 13px;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin-bottom: 14px;
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .header-icon {
+      width: 36px; height: 36px; background: var(--accent);
+      border-radius: 8px; display: grid; place-items: center; flex-shrink: 0;
+    }
+    .header-icon svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; }
+    .header h1 { font-size: 15px; font-weight: 700; }
+    .header p  { font-size: 11px; color: var(--muted); }
+
+    /* ── Controls bar ── */
+    .controls {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 10px 14px; margin-bottom: 14px;
+    }
+    .controls label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+    select {
+      padding: 5px 10px; border: 1.5px solid var(--border); border-radius: 6px;
+      font-family: var(--sans); font-size: 12px; color: var(--text);
+      background: var(--bg); outline: none; cursor: pointer;
+      transition: border-color .15s;
+    }
+    select:focus { border-color: var(--accent); }
+
+    .sort-btns { display: flex; gap: 4px; margin-left: auto; }
+    .sort-btn {
+      padding: 5px 10px; border: 1.5px solid var(--border); border-radius: 6px;
+      font-family: var(--sans); font-size: 11px; font-weight: 500;
+      color: var(--muted); background: var(--surface); cursor: pointer;
+      transition: all .15s;
+    }
+    .sort-btn.active { border-color: var(--accent); background: var(--aclt); color: var(--accent); }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+      font-size: 11px; color: var(--muted); margin-bottom: 14px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .leg-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+    /* ── Chart panels ── */
+    .charts-grid { display: flex; flex-direction: column; gap: 14px; }
+
+    .chart-panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 16px 18px;
+    }
+    .panel-header {
+      display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px;
+    }
+    .panel-icon { font-size: 16px; }
+    .panel-title { font-size: 13px; font-weight: 700; }
+    .panel-sub   { font-size: 11px; color: var(--muted); }
+    .panel-avg {
+      margin-left: auto; font-family: var(--mono); font-size: 11px;
+      color: var(--avg); background: rgba(124,58,237,.08);
+      padding: 2px 7px; border-radius: 4px;
+    }
+
+    .chart-wrap {
+      position: relative;
+      /* height is set dynamically via JS */
+    }
+
+    /* ── Empty / loading ── */
+    .msg-box {
+      text-align: center; padding: 50px 20px; color: var(--muted);
+    }
+    .msg-box svg {
+      width: 36px; height: 36px; stroke: var(--border);
+      fill: none; stroke-width: 1.5; margin-bottom: 8px;
+    }
+    .msg-box p { font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="header-icon">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    </div>
+    <div>
+      <h1>Comparaison des Circonscriptions</h1>
+      <p id="headerSub">—</p>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <label for="deptSelect">Département</label>
+  <select id="deptSelect"></select>
+  <div class="sort-btns">
+    <button class="sort-btn active" id="sortName"  onclick="setSortMode('name')">A→Z</button>
+    <button class="sort-btn"        id="sortOrdi"  onclick="setSortMode('ordi')">Trier ordi</button>
+    <button class="sort-btn"        id="sortTab"   onclick="setSortMode('tab')">Trier tablette</button>
+    <button class="sort-btn"        id="sortProj"  onclick="setSortMode('proj')">Trier projection</button>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="legend-item"><span class="leg-dot" style="background:var(--good)"></span>Mieux que la moy. acad.</span>
+  <span class="legend-item"><span class="leg-dot" style="background:var(--warn)"></span>Proche (±10 %)</span>
+  <span class="legend-item"><span class="leg-dot" style="background:var(--bad)"></span>Moins bien que la moy. acad.</span>
+  <span class="legend-item"><span class="leg-dot" style="background:var(--avg); border-radius:50%"></span>Moy. académique</span>
+</div>
+
+<div class="charts-grid">
+  <div class="chart-panel">
+    <div class="panel-header">
+      <span class="panel-icon">💻</span>
+      <span class="panel-title">Ordinateurs</span>
+      <span class="panel-sub">élèves pour 1 ordinateur — moins = mieux équipé</span>
+      <span class="panel-avg" id="avgOrdiLabel">Moy. acad. : —</span>
+    </div>
+    <div class="chart-wrap" id="wrapOrdi"><canvas id="chartOrdi"></canvas></div>
+  </div>
+
+  <div class="chart-panel">
+    <div class="panel-header">
+      <span class="panel-icon">📱</span>
+      <span class="panel-title">Tablettes</span>
+      <span class="panel-sub">élèves pour 1 tablette — moins = mieux équipé</span>
+      <span class="panel-avg" id="avgTabLabel">Moy. acad. : —</span>
+    </div>
+    <div class="chart-wrap" id="wrapTab"><canvas id="chartTab"></canvas></div>
+  </div>
+
+  <div class="chart-panel">
+    <div class="panel-header">
+      <span class="panel-icon">📽️</span>
+      <span class="panel-title">Équipement projection</span>
+      <span class="panel-sub">% de classes équipées — plus = mieux</span>
+      <span class="panel-avg" id="avgProjLabel">Moy. acad. : —</span>
+    </div>
+    <div class="chart-wrap" id="wrapProj"><canvas id="chartProj"></canvas></div>
+  </div>
+</div>
+
+<script>
+  /* ════ ÉTAT ════ */
+  let allRecords = [];
+  let sortMode   = 'name';
+  let charts     = {};
+
+  const BAR_HEIGHT  = 32;   // px par barre
+  const BAR_MIN_H   = 120;
+
+  /* ════ HELPERS ════ */
+  const norm     = s  => String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const fmtNum   = v  => { const n = parseFloat(v); return (!isFinite(n)||isNaN(n)) ? null : n; };
+  const fmtLabel = v  => { const n = fmtNum(v); return n === null ? '—' : n.toFixed(1); };
+
+  function resolveField(rec, keys) {
+    for (const k of keys) if (rec[k] !== undefined) return rec[k];
+    return null;
+  }
+
+  function extractFields(rec) {
+    return {
+      dept:         resolveField(rec, ['Département','departement']),
+      deptTxt:      resolveField(rec, ['D_partement__texte_','Département__texte_','Departement_texte_']),
+      circo:        resolveField(rec, ['LIB_CIRCO','lib_circo']),
+      codeCirco:    resolveField(rec, ['CODECIRCO','codecirco']),
+      moyCircoOrdi: resolveField(rec, ['Moy_circo_ratio_ordi']),
+      moyAcadOrdi:  resolveField(rec, ['Moy_acad_ratio_ordi']),
+      moyCircoTab:  resolveField(rec, ['Moy_circo_ratio_tablette']),
+      moyAcadTab:   resolveField(rec, ['Moy_acad_ratio_tablette']),
+      moyCircoProj: resolveField(rec, ['Moy_circo_pourcentage_equip_proj']),
+      moyAcadProj:  resolveField(rec, ['Moy_acad_pourcentage_equip_proj']),
+    };
+  }
+
+  /* ════ BUILD CIRCO & DEPT MAPS ════ */
+  function buildData() {
+    const circoMap = new Map();
+    for (const rec of allRecords) {
+      const f = extractFields(rec);
+      const key = String(f.circo ?? '').trim();
+      if (!key || circoMap.has(key)) continue;
+      circoMap.set(key, {
+        nom:      key,
+        dept:     String(f.dept ?? '').trim(),
+        deptTxt:  String(f.deptTxt ?? '').trim(),
+        ordi:     fmtNum(f.moyCircoOrdi),
+        tab:      fmtNum(f.moyCircoTab),
+        proj:     fmtNum(f.moyCircoProj),
+        acadOrdi: fmtNum(f.moyAcadOrdi),
+        acadTab:  fmtNum(f.moyAcadTab),
+        acadProj: fmtNum(f.moyAcadProj),
+      });
+    }
+    return circoMap;
+  }
+
+  function getDepts(circoMap) {
+    const depts = new Map(); // dept -> deptTxt
+    for (const c of circoMap.values()) {
+      if (c.dept && !depts.has(c.dept)) depts.set(c.dept, c.deptTxt || c.dept);
+    }
+    return new Map([...depts.entries()].sort((a,b) => a[0].localeCompare(b[0])));
+  }
+
+  /* ════ COLOR LOGIC ════ */
+  // Ordi/tablette : ratio élevé = mal équipé
+  function colorRatio(val, avg) {
+    if (val === null || avg === null || avg <= 0) return '#94a3b8';
+    if (val <= avg * 0.9) return '#16a34a';   // bien équipé
+    if (val >= avg * 1.1) return '#dc2626';   // mal équipé
+    return '#d97706';
+  }
+  function colorRatioAlpha(val, avg) {
+    if (val === null || avg === null || avg <= 0) return 'rgba(148,163,184,.25)';
+    if (val <= avg * 0.9) return 'rgba(22,163,74,.25)';
+    if (val >= avg * 1.1) return 'rgba(220,38,38,.25)';
+    return 'rgba(217,119,6,.25)';
+  }
+
+  // Projection : % élevé = bien équipé
+  function colorPct(val, avg) {
+    if (val === null || avg === null || avg <= 0) return '#94a3b8';
+    if (val >= avg * 1.1) return '#16a34a';
+    if (val <= avg * 0.9) return '#dc2626';
+    return '#d97706';
+  }
+  function colorPctAlpha(val, avg) {
+    if (val === null || avg === null || avg <= 0) return 'rgba(148,163,184,.25)';
+    if (val >= avg * 1.1) return 'rgba(22,163,74,.25)';
+    if (val <= avg * 0.9) return 'rgba(220,38,38,.25)';
+    return 'rgba(217,119,6,.25)';
+  }
+
+  /* ════ CHART.JS PLUGIN : ligne de référence verticale ════ */
+  const avgLinePlugin = {
+    id: 'avgLine',
+    afterDraw(chart) {
+      const avgVal = chart.options.plugins.avgLine?.value;
+      if (avgVal == null) return;
+      const { ctx, chartArea, scales } = chart;
+      const x = scales.x.getPixelForValue(avgVal);
+      if (x < chartArea.left || x > chartArea.right) return;
+
+      ctx.save();
+      ctx.strokeStyle = '#7c3aed';
+      ctx.lineWidth   = 2;
+      ctx.setLineDash([6, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
+      ctx.stroke();
+
+      // Étiquette
+      ctx.setLineDash([]);
+      ctx.fillStyle    = '#7c3aed';
+      ctx.font         = '10px DM Sans, sans-serif';
+      ctx.textAlign    = 'center';
+      const label = `acad. ${fmtLabel(avgVal)}`;
+      const tw    = ctx.measureText(label).width + 8;
+      const tx    = Math.max(chartArea.left + tw/2 + 2, Math.min(chartArea.right - tw/2 - 2, x));
+      ctx.fillStyle = 'rgba(124,58,237,.1)';
+      ctx.beginPath();
+      ctx.roundRect(tx - tw/2, chartArea.top - 1, tw, 16, 3);
+      ctx.fill();
+      ctx.fillStyle = '#7c3aed';
+      ctx.fillText(label, tx, chartArea.top + 10);
+      ctx.restore();
+    }
+  };
+  Chart.register(avgLinePlugin);
+
+  /* ════ CREATE / UPDATE CHART ════ */
+  function makeOrUpdateChart(canvasId, wrapId, circos, key, avgKey, colorFn, colorAlphaFn, unit) {
+    const sorted = sortCircos(circos, key);
+    const labels = sorted.map(c => c.nom);
+    const values = sorted.map(c => c[key]);
+    const avgVal = sorted[0]?.[avgKey] ?? null;
+    const colors  = sorted.map(c => colorFn(c[key], avgVal));
+    const colorsBg = sorted.map(c => colorAlphaFn(c[key], avgVal));
+
+    const h = Math.max(BAR_MIN_H, sorted.length * BAR_HEIGHT);
+    document.getElementById(wrapId).style.height = h + 'px';
+
+    const data = {
+      labels,
+      datasets: [{
+        label: unit,
+        data: values,
+        backgroundColor: colorsBg,
+        borderColor:     colors,
+        borderWidth:     2,
+        borderRadius:    4,
+        borderSkipped:   false,
+      }]
+    };
+
+    const options = {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.x;
+              if (v === null) return ' Données manquantes';
+              const avg = avgVal;
+              const diff = avg ? ((v - avg) / avg * 100).toFixed(1) : null;
+              const sign = diff > 0 ? '+' : '';
+              return [
+                ` ${fmtLabel(v)} ${unit}`,
+                avg ? ` Moy. acad. : ${fmtLabel(avg)} (${sign}${diff}%)` : '',
+              ].filter(Boolean);
+            }
+          },
+          backgroundColor: '#1e293b',
+          titleColor: '#94a3b8',
+          bodyColor: '#f8fafc',
+          padding: 10,
+          cornerRadius: 6,
+        },
+        avgLine: { value: avgVal },
+      },
+      scales: {
+        x: {
+          grid:  { color: '#e2e6ed', lineWidth: 1 },
+          ticks: { font: { family: 'DM Mono', size: 10 }, color: '#64748b' },
+          border: { display: false },
+        },
+        y: {
+          grid:  { display: false },
+          ticks: {
+            font: { family: 'DM Sans', size: 11 },
+            color: '#1e293b',
+            // Troncature si trop long
+            callback: (val, i) => {
+              const lbl = labels[i];
+              return lbl.length > 28 ? lbl.slice(0, 27) + '…' : lbl;
+            }
+          },
+          border: { display: false },
+        }
+      },
+      animation: { duration: 300 },
+    };
+
+    if (charts[canvasId]) {
+      charts[canvasId].data    = data;
+      charts[canvasId].options = options;
+      charts[canvasId].update();
+    } else {
+      const canvas = document.getElementById(canvasId);
+      charts[canvasId] = new Chart(canvas, { type: 'bar', data, options });
+    }
+  }
+
+  /* ════ SORT ════ */
+  function sortCircos(circos, primaryKey) {
+    const copy = [...circos];
+    if (sortMode === 'name') {
+      return copy.sort((a, b) => a.nom.localeCompare(b.nom));
+    }
+    // Trier par la clé demandée (croissant pour ratios, décroissant pour proj)
+    const keyMap = { ordi: 'ordi', tab: 'tab', proj: 'proj' };
+    const sk = keyMap[sortMode] || primaryKey;
+    const isRatio = (sk === 'ordi' || sk === 'tab');
+    return copy.sort((a, b) => {
+      const va = a[sk] ?? (isRatio ? Infinity : -Infinity);
+      const vb = b[sk] ?? (isRatio ? Infinity : -Infinity);
+      return isRatio ? va - vb : vb - va;
+    });
+  }
+
+  function setSortMode(m) {
+    sortMode = m;
+    ['sortName','sortOrdi','sortTab','sortProj'].forEach(id => {
+      document.getElementById(id).classList.toggle('active', id === 'sort' + m.charAt(0).toUpperCase() + m.slice(1));
+    });
+    updateCharts();
+  }
+
+  /* ════ MAIN UPDATE ════ */
+  function updateCharts() {
+    const circoMap = buildData();
+    const depts    = getDepts(circoMap);
+    const selDept  = document.getElementById('deptSelect').value;
+
+    // Filtrer les circos du département sélectionné
+    const circos = Array.from(circoMap.values())
+      .filter(c => !selDept || c.dept === selDept);
+
+    if (!circos.length) {
+      document.getElementById('headerSub').textContent = 'Aucune circonscription';
+      return;
+    }
+
+    // Référence académique (première valeur non-nulle)
+    const acadOrdi = circos.find(c => c.acadOrdi !== null)?.acadOrdi ?? null;
+    const acadTab  = circos.find(c => c.acadTab  !== null)?.acadTab  ?? null;
+    const acadProj = circos.find(c => c.acadProj !== null)?.acadProj ?? null;
+
+    document.getElementById('headerSub').textContent =
+      `${circos.length} circonscription${circos.length>1?'s':''} — ${depts.get(selDept) || 'Tous les départements'}`;
+    document.getElementById('avgOrdiLabel').textContent = `Moy. acad. : ${fmtLabel(acadOrdi)} él./ordi`;
+    document.getElementById('avgTabLabel').textContent  = `Moy. acad. : ${fmtLabel(acadTab)} él./tab.`;
+    document.getElementById('avgProjLabel').textContent = `Moy. acad. : ${fmtLabel(acadProj)} %`;
+
+    makeOrUpdateChart('chartOrdi', 'wrapOrdi', circos, 'ordi', 'acadOrdi', colorRatio, colorRatioAlpha, 'él./ordi');
+    makeOrUpdateChart('chartTab',  'wrapTab',  circos, 'tab',  'acadTab',  colorRatio, colorRatioAlpha, 'él./tablette');
+    makeOrUpdateChart('chartProj', 'wrapProj', circos, 'proj', 'acadProj', colorPct,   colorPctAlpha,   '%');
+  }
+
+  /* ════ DEPT SELECTOR ════ */
+  function populateDepts() {
+    const circoMap = buildData();
+    const depts    = getDepts(circoMap);
+    const sel      = document.getElementById('deptSelect');
+    const prev     = sel.value;
+
+    sel.innerHTML = '<option value="">Tous les départements</option>';
+    for (const [code, txt] of depts) {
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = `${txt} (${code})`;
+      sel.appendChild(opt);
+    }
+    if (prev && [...depts.keys()].includes(prev)) sel.value = prev;
+  }
+
+  document.getElementById('deptSelect').addEventListener('change', () => {
+    updateCharts();
+  });
+
+  /* ════ GRIST ════ */
+  if (typeof grist !== 'undefined') {
+    grist.ready({ requiredAccess: 'read table' });
+    grist.onRecords(records => {
+      allRecords = records;
+      populateDepts();
+      updateCharts();
+    });
+  } else {
+    // ── Démo ──
+    document.getElementById('headerSub').textContent = 'Mode démo';
+    allRecords = [
+      { Département:28, D_partement__texte_:'Eure-et-Loir', LIB_CIRCO:'IEN CHARTRES 1', CODECIRCO:'0280041A', Moy_circo_ratio_ordi:12.0, Moy_acad_ratio_ordi:16.0, Moy_circo_ratio_tablette:22.0, Moy_acad_ratio_tablette:18.0, Moy_circo_pourcentage_equip_proj:90.0,  Moy_acad_pourcentage_equip_proj:88.0 },
+      { Département:28, D_partement__texte_:'Eure-et-Loir', LIB_CIRCO:'IEN CHARTRES 2', CODECIRCO:'0280042B', Moy_circo_ratio_ordi:20.0, Moy_acad_ratio_ordi:16.0, Moy_circo_ratio_tablette:15.0, Moy_acad_ratio_tablette:18.0, Moy_circo_pourcentage_equip_proj:75.0,  Moy_acad_pourcentage_equip_proj:88.0 },
+      { Département:28, D_partement__texte_:'Eure-et-Loir', LIB_CIRCO:'IEN CHARTRES 3', CODECIRCO:'0280043C', Moy_circo_ratio_ordi:14.0, Moy_acad_ratio_ordi:16.0, Moy_circo_ratio_tablette:17.0, Moy_acad_ratio_tablette:18.0, Moy_circo_pourcentage_equip_proj:88.0,  Moy_acad_pourcentage_equip_proj:88.0 },
+      { Département:28, D_partement__texte_:'Eure-et-Loir', LIB_CIRCO:'IEN CHARTRES 4', CODECIRCO:'0280050C', Moy_circo_ratio_ordi:14.0, Moy_acad_ratio_ordi:16.0, Moy_circo_ratio_tablette:20.0, Moy_acad_ratio_tablette:18.0, Moy_circo_pourcentage_equip_proj:84.0,  Moy_acad_pourcentage_equip_proj:88.0 },
+      { Département:28, D_partement__texte_:'Eure-et-Loir', LIB_CIRCO:'IEN DREUX 1',    CODECIRCO:'0280060D', Moy_circo_ratio_ordi:18.0, Moy_acad_ratio_ordi:16.0, Moy_circo_ratio_tablette:25.0, Moy_acad_ratio_tablette:18.0, Moy_circo_pourcentage_equip_proj:95.0,  Moy_acad_pourcentage_equip_proj:88.0 },
+      { Département:28, D_partement__texte_:'Eure-et-Loir', LIB_CIRCO:'IEN DREUX 2',    CODECIRCO:'0280061E', Moy_circo_ratio_ordi:10.0, Moy_acad_ratio_ordi:16.0, Moy_circo_ratio_tablette:30.0, Moy_acad_ratio_tablette:18.0, Moy_circo_pourcentage_equip_proj:100.0, Moy_acad_pourcentage_equip_proj:88.0 },
+      { Département:45, D_partement__texte_:'Loiret',       LIB_CIRCO:'IEN ORLÉANS 1',  CODECIRCO:'0450010A', Moy_circo_ratio_ordi:10.0, Moy_acad_ratio_ordi:16.0, Moy_circo_ratio_tablette:12.0, Moy_acad_ratio_tablette:18.0, Moy_circo_pourcentage_equip_proj:105.0, Moy_acad_pourcentage_equip_proj:88.0 },
+      { Département:45, D_partement__texte_:'Loiret',       LIB_CIRCO:'IEN ORLÉANS 2',  CODECIRCO:'0450011B', Moy_circo_ratio_ordi:22.0, Moy_acad_ratio_ordi:16.0, Moy_circo_ratio_tablette:19.0, Moy_acad_ratio_tablette:18.0, Moy_circo_pourcentage_equip_proj:72.0,  Moy_acad_pourcentage_equip_proj:88.0 },
+      { Département:45, D_partement__texte_:'Loiret',       LIB_CIRCO:'IEN MONTARGIS',  CODECIRCO:'0450020C', Moy_circo_ratio_ordi:15.0, Moy_acad_ratio_ordi:16.0, Moy_circo_ratio_tablette:16.0, Moy_acad_ratio_tablette:18.0, Moy_circo_pourcentage_equip_proj:91.0,  Moy_acad_pourcentage_equip_proj:88.0 },
+    ];
+    populateDepts();
+    updateCharts();
+  }
+</script>
+</body>
+</html>
