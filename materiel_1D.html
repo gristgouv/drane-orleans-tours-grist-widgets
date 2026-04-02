@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ratio Ordinateur – Écoles</title>
+  <title>Équipement numérique – Écoles</title>
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
@@ -150,25 +150,46 @@
       font-weight: 500;
     }
 
-    /* ── Ratio badge ── */
-    .ratio-badge {
+    /* ── Metric tiles ── */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .metric-tile {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
       display: flex;
       flex-direction: column;
-      align-items: flex-end;
-      flex-shrink: 0;
+      gap: 2px;
     }
-    .ratio-value {
-      font-family: var(--mono);
-      font-size: 20px;
-      font-weight: 500;
-      line-height: 1;
+    .metric-tile.active { background: #fff; }
+    .mt-icon-label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
-    .ratio-label {
+    .mt-icon { font-size: 12px; }
+    .mt-label {
       font-size: 9px;
       color: var(--muted);
       text-transform: uppercase;
-      letter-spacing: .5px;
-      margin-top: 2px;
+      letter-spacing: .4px;
+      font-weight: 500;
+    }
+    .mt-value {
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 500;
+      line-height: 1.1;
+    }
+    .mt-sub {
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.3;
     }
     .color-good { color: var(--good); }
     .color-warn { color: var(--warn); }
@@ -259,7 +280,7 @@
     <svg viewBox="0 0 24 24"><path d="M12 3L2 9l10 6 10-6-10-6zM2 17l10 6 10-6M2 13l10 6 10-6"/></svg>
   </div>
   <div>
-    <h1>Ratio Ordinateur</h1>
+    <h1>Équipement numérique</h1>
     <p>Rechercher une école par UAI ou nom</p>
   </div>
 </div>
@@ -332,6 +353,10 @@
       moyAcad:      resolveField(rec, ['Moy_acad_ratio_ordi']),
       ratioTab:     resolveField(rec, ['ratio_tablette']),
       moyDeptTab:   resolveField(rec, ['Moy_depart_ratio_tablette']),
+      pctProj:      resolveField(rec, ['pourcentage_equip_proj']),
+      moyDeptProj:  resolveField(rec, ['Moy_depart_pourcentage_equip_proj']),
+      moyAcadProj:  resolveField(rec, ['Moy_acad_pourcentage_equip_proj']),
+      moyCommProj:  resolveField(rec, ['Moy_commune_pourcentage_equip_proj']),
     };
   }
 
@@ -371,13 +396,56 @@
     results.innerHTML = filtered.map(rec => {
       const f = extractFields(rec);
       const id = rec.id;
-      const ratio = parseFloat(f.ratio);
-      const moyDept = parseFloat(f.moyDept);
+      const ratio    = parseFloat(f.ratio);
+      const ratioTab = parseFloat(f.ratioTab);
+      const pctProj  = parseFloat(f.pctProj);
+      const moyDept  = parseFloat(f.moyDept);
       const isExpanded = expandedId === id;
-      const colorClass = ratioColor(ratio, moyDept);
-      const ratioStr = fmt(ratio);
       const nomClean = String(f.nom ?? '').trim();
       const uaiStr   = String(f.uai ?? '').trim();
+
+      // "xx élèves pour 1 X"
+      function elevesFor1(r) {
+        const v = parseFloat(r);
+        if (!v || isNaN(v) || v === 0) return null;
+        const n = Math.round(100 / v);
+        return n;
+      }
+
+      function metricTile(icon, label, value, colorClass, subLine) {
+        const valStr = (value === null || value === undefined || isNaN(value)) ? '—' : fmt(value);
+        return `
+          <div class="metric-tile ${isExpanded ? 'active' : ''}">
+            <div class="mt-icon-label">
+              <span class="mt-icon">${icon}</span>
+              <span class="mt-label">${label}</span>
+            </div>
+            <div class="mt-value ${colorClass}">${valStr}</div>
+            ${subLine ? `<div class="mt-sub">${subLine}</div>` : '<div class="mt-sub">&nbsp;</div>'}
+          </div>`;
+      }
+
+      const n1 = elevesFor1(ratio);
+      const n2 = elevesFor1(ratioTab);
+
+      const tile1 = metricTile(
+        '💻', 'Ordinateurs',
+        ratio,
+        ratioColor(ratio, parseFloat(f.moyDept)),
+        n1 ? `${n1} élève${n1 > 1 ? 's' : ''} pour 1 ordi` : null
+      );
+      const tile2 = metricTile(
+        '📱', 'Tablettes',
+        ratioTab,
+        ratioColor(ratioTab, parseFloat(f.moyDeptTab)),
+        n2 ? `${n2} élève${n2 > 1 ? 's' : ''} pour 1 tablette` : null
+      );
+      const tile3 = metricTile(
+        '📽️', '% Projection',
+        isNaN(pctProj) ? null : pctProj,
+        ratioColor(pctProj, parseFloat(f.moyDeptProj)),
+        !isNaN(pctProj) ? `moy. dépt : ${fmt(f.moyDeptProj)}%` : null
+      );
 
       const barMax = Math.max(ratio || 0, moyDept || 0, parseFloat(f.moyAcad) || 0, parseFloat(f.moyCommune) || 0, 1);
 
@@ -388,19 +456,15 @@
             <div class="di-value">${fmt(f.nbEleves)}</div>
           </div>
           <div class="detail-item">
-            <div class="di-label">Ratio tablette</div>
-            <div class="di-value">${fmt(f.ratioTab)}</div>
-          </div>
-          <div class="detail-item">
-            <div class="di-label">Moy. académie</div>
+            <div class="di-label">Moy. académie (ordi)</div>
             <div class="di-value">${fmt(f.moyAcad)}</div>
           </div>
           <div class="detail-item">
-            <div class="di-label">Moy. département</div>
+            <div class="di-label">Moy. département (ordi)</div>
             <div class="di-value">${fmt(f.moyDept)}</div>
           </div>
           <div class="detail-item">
-            <div class="di-label">Moy. commune</div>
+            <div class="di-label">Moy. commune (ordi)</div>
             <div class="di-value">${fmt(f.moyCommune)}</div>
           </div>
         </div>
@@ -423,10 +487,9 @@
                 ${f.dept ? `<span>${escHtml(String(f.dept))}</span>` : ''}
               </div>
             </div>
-            <div class="ratio-badge">
-              <div class="ratio-value ${colorClass}">${ratioStr}</div>
-              <div class="ratio-label">ordi / 100 él.</div>
-            </div>
+          </div>
+          <div class="metrics-row">
+            ${tile1}${tile2}${tile3}
           </div>
           ${detailHtml}
         </div>`;
@@ -472,9 +535,9 @@
     // Développement hors Grist : données fictives
     document.getElementById('status').textContent = 'Mode démo (hors Grist)';
     allRecords = [
-      { id: 1, UAI: '0280576Z', Nom: ' Ecole primaire Charlemagne - Saint-Martin-de-Nigelles', Ville: 'ST MARTIN DE NIGELLES', ratio_ordinateur: 4.0,  Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 4.0,  Nb_eleves: 130, ratio_tablette: null },
-      { id: 2, UAI: '0280580D', Nom: ' Ecole primaire - Villiers-le-Morhier',                  Ville: 'VILLIERS LE MORHIER',   ratio_ordinateur: 33.0, Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 33.0, Nb_eleves: 126, ratio_tablette: null },
-      { id: 3, UAI: '0280910M', Nom: ' Ecole élémentaire Emile Pottier - Gallardon',           Ville: 'GALLARDON',            ratio_ordinateur: 4.0,  Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 4.0,  Nb_eleves: 197, ratio_tablette: null },
+      { id: 1, UAI: '0280576Z', Nom: ' Ecole primaire Charlemagne - Saint-Martin-de-Nigelles', Ville: 'ST MARTIN DE NIGELLES', ratio_ordinateur: 4.0,  Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 4.0,  Nb_eleves: 130, ratio_tablette: 25.0, Moy_depart_ratio_tablette: 17.0, pourcentage_equip_proj: 100.0, Moy_depart_pourcentage_equip_proj: 93.0 },
+      { id: 2, UAI: '0280580D', Nom: ' Ecole primaire - Villiers-le-Morhier',                  Ville: 'VILLIERS LE MORHIER',   ratio_ordinateur: 33.0, Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 33.0, Nb_eleves: 126, ratio_tablette: 0.0,  Moy_depart_ratio_tablette: 17.0, pourcentage_equip_proj: 120.0, Moy_depart_pourcentage_equip_proj: 93.0 },
+      { id: 3, UAI: '0280910M', Nom: ' Ecole élémentaire Emile Pottier - Gallardon',           Ville: 'GALLARDON',            ratio_ordinateur: 4.0,  Moy_depart_ratio_ordi: 17.0, Moy_acad_ratio_ordi: 16.0, Moy_commune_ratio_ordi: 4.0,  Nb_eleves: 197, ratio_tablette: 7.0,  Moy_depart_ratio_tablette: 17.0, pourcentage_equip_proj: 100.0, Moy_depart_pourcentage_equip_proj: 93.0 },
     ];
     render('');
   }
