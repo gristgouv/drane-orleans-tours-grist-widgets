@@ -174,6 +174,7 @@
       <span class="leg"><span class="leg-dot" style="background:var(--p3)"></span>Moins prioritaire</span>
     </div>
     <span id="counter">—</span>
+    <button id="btnDebug" onclick="showDebug()" style="padding:4px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg);font-size:10px;color:var(--muted);cursor:pointer" title="Afficher les colonnes disponibles">🔍 debug</button>
   </div>
 
   <div id="map-wrap">
@@ -403,20 +404,15 @@
       const uaiC = str(rec, UAI_C);
       if (!uaiC) continue;
       if (!map_.has(uaiC)) {
-        map_.set(uaiC, {
-          uaiC,
-          nomC:   str(rec, NOM_C),
-          ecoles: [],
-          lat: fld(rec, LAT_C),
-          lng: fld(rec, LNG_C),
-        });
+        map_.set(uaiC, { uaiC, nomC: str(rec, NOM_C), ecoles: [], lat: null, lng: null });
       }
-      map_.get(uaiC).ecoles.push(rec);
+      const c = map_.get(uaiC);
+      c.ecoles.push(rec);
+      // Prendre les coordonnées dès qu'on trouve une valeur non-nulle dans n'importe quel record du groupe
+      if (c.lat === null) c.lat = fld(rec, LAT_C);
+      if (c.lng === null) c.lng = fld(rec, LNG_C);
     }
-    // Calcul coordonnées collège
     for (const c of map_.values()) {
-      // Coordonnées issues directement de la colonne formule $UAI_college.latitude / .longitude
-      // Priorité dominante (la plus sévère)
       const p1 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p1').length;
       const p2 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p2').length;
       c.priorityCls = p1 > 0 ? 'p1' : p2 > 0 ? 'p2' : 'p3';
@@ -424,10 +420,23 @@
     return map_;
   }
 
+  /* ════ DEBUG : colonnes disponibles dans les records ════ */
+  function debugColumns() {
+    if (!allRecords.length) return '(aucun record)';
+    const keys = Object.keys(allRecords[0]);
+    const latCols  = keys.filter(k => k.toLowerCase().includes('lat'));
+    const lngCols  = keys.filter(k => k.toLowerCase().includes('lon') || k.toLowerCase().includes('lng'));
+    return `Toutes les colonnes : ${keys.join(', ')}\n\nColonnes lat : ${latCols.join(', ')}\nColonnes lng : ${lngCols.join(', ')}`;
+  }
+
   /* ════ RENDER MARKERS ════ */
   function renderMarkers(query) {
     clearMarkers();
     const q = norm(query.trim());
+
+  function showDebug() {
+    alert(debugColumns());
+  }
 
     if (mode === 'ecoles') {
       const filtered = allRecords.filter(r => {
@@ -478,8 +487,16 @@
         markers.push(m);
       });
 
-      document.getElementById('counter').textContent =
-        `${filtered.length} collège${filtered.length!==1?'s':''} affiché${filtered.length!==1?'s':''}`;
+      const placed = markers.length;
+      const skipped = filtered.length - placed;
+      let msg = `${placed} collège${placed!==1?'s':''} affiché${placed!==1?'s':''}`;
+      if (skipped > 0) {
+        msg += ` · ⚠️ ${skipped} sans coordonnées`;
+        const cols = allRecords.length ? Object.keys(allRecords[0]).filter(k=>k.toLowerCase().includes('lat')||k.toLowerCase().includes('college')) : [];
+        console.warn('[Carte Reconnect] Colonnes détectées avec lat/college:', cols);
+        console.warn('[Carte Reconnect] Candidates cherchées:', LAT_C);
+      }
+      document.getElementById('counter').textContent = msg;
     }
 
     // Ajuster la vue sur les marqueurs visibles
