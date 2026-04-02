@@ -206,8 +206,8 @@
 
   function extractFields(rec) {
     return {
-      dept:         resolveField(rec, ['Département','departement']),
-      deptTxt:      resolveField(rec, ['D_partement__texte_','Département__texte_','Departement_texte_']),
+      dept:         resolveField(rec, ['Département','D_partement','Departement','departement','dept']),
+      deptTxt:      resolveField(rec, ['D_partement__texte_','Département__texte_','Departement_texte_','Département (texte)']),
       circo:        resolveField(rec, ['LIB_CIRCO','lib_circo']),
       codeCirco:    resolveField(rec, ['CODECIRCO','codecirco']),
       moyCircoOrdi: resolveField(rec, ['Moy_circo_ratio_ordi']),
@@ -226,10 +226,12 @@
       const f = extractFields(rec);
       const key = String(f.circo ?? '').trim();
       if (!key || circoMap.has(key)) continue;
+      const deptKey = String(f.dept ?? '').trim() || String(f.deptTxt ?? '').trim();
+      const deptTxt = String(f.deptTxt ?? f.dept ?? '').trim();
       circoMap.set(key, {
         nom:      key,
-        dept:     String(f.dept ?? '').trim(),
-        deptTxt:  String(f.deptTxt ?? '').trim(),
+        dept:     deptKey,
+        deptTxt:  deptTxt || deptKey,
         ordi:     fmtNum(f.moyCircoOrdi),
         tab:      fmtNum(f.moyCircoTab),
         proj:     fmtNum(f.moyCircoProj),
