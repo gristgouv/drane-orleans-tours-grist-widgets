@@ -473,47 +473,71 @@
         `${filtered.length} école${filtered.length!==1?'s':''} affichée${filtered.length!==1?'s':''}`;
 
     } else {
-      // Mode collège
+      // Mode collège — diagnostic complet à chaque étape
       const collegeMap = buildCollegeMap();
-      const filtered = Array.from(collegeMap.values()).filter(c => {
+      const allColleges = Array.from(collegeMap.values());
+      const withCoords  = allColleges.filter(c => c.lat !== null && c.lng !== null);
+      const filtered    = allColleges.filter(c => {
         if (!q) return true;
         return norm(c.nomC).includes(q) || norm(c.uaiC).includes(q);
       });
+      const filteredWithCoords = filtered.filter(c => c.lat !== null && c.lng !== null);
 
-      filtered.forEach(college => {
-        if (college.lat===null || college.lng===null) return;
-        const m = L.marker([college.lat, college.lng], { icon: markerIcon(college.priorityCls, true) }).addTo(map);
-        m._college = college;
-        m.on('click', () => {
-          if (selectedMarker) selectedMarker._icon?.classList.remove('selected');
-          selectedMarker = m;
-          m._icon?.classList.add('selected');
-          renderCollegeCard(college);
-          openCard();
-        });
-        markers.push(m);
+      filteredWithCoords.forEach(college => {
+        try {
+          const m = L.marker([college.lat, college.lng], { icon: markerIcon(college.priorityCls, true) }).addTo(map);
+          m._college = college;
+          m.on('click', () => {
+            if (selectedMarker) selectedMarker._icon?.classList.remove('selected');
+            selectedMarker = m;
+            m._icon?.classList.add('selected');
+            renderCollegeCard(college);
+            openCard();
+          });
+          markers.push(m);
+        } catch(e) {
+          console.error('Marker error:', college.uaiC, college.lat, college.lng, e);
+        }
       });
 
-      const placed = markers.length;
-      const skipped = filtered.length - placed;
-      let msg = `${placed} collège${placed!==1?'s':''} affiché${placed!==1?'s':''}`;
-      if (skipped > 0) {
-        msg += ` · ⚠️ ${skipped} sans coordonnées`;
-      }
+      // Diagnostic visible
+      const rec0 = allRecords[0] || {};
+      const diag = {
+        totalRecords:    allRecords.length,
+        totalColleges:   allColleges.length,
+        avecCoords:      withCoords.length,
+        sansCoords:      allColleges.length - withCoords.length,
+        marqueursPoses:  markers.length,
+        // Premier record : valeurs brutes des colonnes coordonnées
+        college_latitude_raw:  rec0.college_latitude,
+        college_longitude_raw: rec0.college_longitude,
+        findLat:         allRecords.length ? findCollegeCoord(rec0, 'lat') : 'n/a',
+        findLng:         allRecords.length ? findCollegeCoord(rec0, 'lng') : 'n/a',
+        allKeys:         Object.keys(rec0).join(', '),
+      };
+      console.log('[CollègeMode]', diag);
+
+      const msg = markers.length > 0
+        ? `${markers.length} collège${markers.length>1?'s':''} affiché${markers.length>1?'s':''}`
+        : `⚠️ 0 affiché · ${allColleges.length} collèges · ${withCoords.length} avec coords`;
       document.getElementById('counter').textContent = msg;
-      // Affichage diagnostique si aucun marqueur
-      if (placed === 0 && filtered.length > 0) {
-        const allKeys = allRecords.length ? Object.keys(allRecords[0]) : [];
-        const relKeys = allKeys.filter(k => k.toLowerCase().includes('lat') || k.toLowerCase().includes('lon') || k.toLowerCase().includes('college'));
-        const sample = allRecords[0] ? relKeys.map(k => `${k}=${allRecords[0][k]}`).join(', ') : '—';
+
+      // Panneau diagnostic visible si aucun marqueur
+      if (markers.length === 0 && allColleges.length > 0) {
+        const oldDiag = document.getElementById('diag-panel');
+        if (oldDiag) oldDiag.remove();
+        const rows = Object.entries(diag).map(([k,v]) =>
+          `<tr><td style="color:#64748b;padding-right:10px">${k}</td><td style="font-weight:600;word-break:break-all">${v}</td></tr>`
+        ).join('');
         document.getElementById('map').insertAdjacentHTML('afterbegin',
-          `<div style="position:absolute;top:10px;left:10px;z-index:999;background:#fff;border:1px solid #f59e0b;border-radius:8px;padding:12px 14px;max-width:420px;font-size:11px;font-family:monospace;box-shadow:0 2px 8px rgba(0,0,0,.15)">
-            <strong>⚠️ Aucun marqueur collège — colonnes détectées dans le record :</strong><br><br>
-            <em>Colonnes lat/lon/college :</em> ${relKeys.join(', ') || '(aucune)'}<br>
-            <em>Valeurs :</em> ${sample || '—'}<br><br>
-            <em>Colonnes cherchées :</em> ${LAT_C.join(', ')}
+          `<div id="diag-panel" style="position:absolute;top:10px;left:10px;z-index:999;background:#fff;border:2px solid #f59e0b;border-radius:8px;padding:14px;max-width:480px;font-size:11px;font-family:monospace;box-shadow:0 4px 16px rgba(0,0,0,.2);max-height:80vh;overflow-y:auto">
+            <strong style="font-size:12px">🔍 Diagnostic collèges</strong>
+            <table style="margin-top:8px;border-collapse:collapse">${rows}</table>
+            <div style="margin-top:8px;color:#64748b">Cliquez sur le fond pour fermer</div>
           </div>`
         );
+        document.getElementById('diag-panel').onclick = e => { e.stopPropagation(); };
+        document.getElementById('map').onclick = () => { const d = document.getElementById('diag-panel'); if(d) d.remove(); };
       }
     }
 
