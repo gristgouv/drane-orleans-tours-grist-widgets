@@ -273,9 +273,21 @@
     const pct  = barPct(val, s.min, s.max);
     const diff = (val!==null && mean!==null) ? (val-mean) : null;
     const diffStr = diff!==null ? `${diff>=0?'+':''}${diff.toFixed(dec)} vs moy.` : '';
+    
+    // Ratio inverse pour ordinateurs
+    let inverseRatio = '';
+    if (statKey === 'ordi' && val !== null && val > 0) {
+      const eleves_per_ordi = Math.round(1 / val);
+      inverseRatio = `<div style="font-size:10px;color:var(--muted);margin-top:3px">1 ordinateur<br>pour ${eleves_per_ordi} élève${eleves_per_ordi>1?'s':''}</div>`;
+    }
+    
+    // Pour connexion, afficher 0 si pas de données
+    const displayVal = (statKey === 'connexion' && val === null) ? '0' : fmtNum(val, dec);
+    
     return `<td class="cell-ind">
-      <div class="ind-val">${fmtNum(val,dec)}</div>
+      <div class="ind-val">${displayVal}</div>
       <div class="ind-diff ${cls}"><span class="arrow">${arr}</span><span>${diffStr}</span></div>
+      ${inverseRatio}
       <div class="mini-bar-wrap"><div class="mini-bar-fill" style="width:${pct}%;background:${barColor(cls)}"></div></div>
     </td>`;
   }
