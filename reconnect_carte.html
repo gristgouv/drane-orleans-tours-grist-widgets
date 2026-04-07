@@ -644,8 +644,6 @@
   }
 
   /* ════ GRIST onRecord (surligner l'école sélectionnée) ════ */
-  let currentRowId = null;
-  
   function highlightRecord(rec) {
     currentRowId = rec?.id || null;
     if (!rec || mode !== 'ecoles') return;
