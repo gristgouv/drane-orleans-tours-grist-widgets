@@ -378,110 +378,87 @@
             <input type="checkbox" id="besoinMatCheckbox" ${besoinMat ? 'checked' : ''} />
             <span>Besoin de matériel</span>
           </label>
-          <button id="validateBtn_besoinMat" class="validate-btn">Valider</button>
         </div>
-        <span id="updateStatus_besoinMat" class="update-status"></span>
         
         <div class="checkbox-section" style="margin-top:8px">
           <label class="checkbox-label">
             <input type="checkbox" id="besoinMaintCheckbox" ${besoinMaint ? 'checked' : ''} />
             <span>Besoin de maintenance</span>
           </label>
-          <button id="validateBtn_besoinMaint" class="validate-btn">Valider</button>
         </div>
-        <span id="updateStatus_besoinMaint" class="update-status"></span>
         
         <div class="checkbox-section" style="margin-top:8px">
           <label class="checkbox-label">
             <input type="checkbox" id="besoinForm26Checkbox" ${besoinForm26 ? 'checked' : ''} />
             <span>Besoin formation 2026-27</span>
           </label>
-          <button id="validateBtn_besoinForm26" class="validate-btn">Valider</button>
         </div>
-        <span id="updateStatus_besoinForm26" class="update-status"></span>
         
         <div class="checkbox-section" style="margin-top:8px">
           <label class="checkbox-label">
             <input type="checkbox" id="besoinForm27Checkbox" ${besoinForm27 ? 'checked' : ''} />
             <span>Besoin formation 2027-28</span>
           </label>
-          <button id="validateBtn_besoinForm27" class="validate-btn">Valider</button>
         </div>
-        <span id="updateStatus_besoinForm27" class="update-status"></span>
+        
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+          <button id="validateAllBtn" class="validate-btn" style="flex:1">Valider les changements</button>
+          <span id="updateStatus_all" class="update-status" style="flex-shrink:0"></span>
+        </div>
       </div>`;
 
-    // Fonction helper pour créer les event listeners
-    const createValidateHandler = (checkboxId, statusId, btnId, fieldKey) => {
-      document.getElementById(btnId).addEventListener('click', async () => {
-        const checkbox = document.getElementById(checkboxId);
-        const statusSpan = document.getElementById(statusId);
-        const validateBtn = document.getElementById(btnId);
-        const newValue = checkbox.checked;
-        
-        statusSpan.textContent = '⏳ Mise à jour...';
-        statusSpan.style.color = 'var(--muted)';
-        validateBtn.disabled = true;
-        
-        const recordIdToUpdate = displayedCardRecordId || currentRowId;
-        
-        if (typeof grist !== 'undefined' && recordIdToUpdate) {
-          try {
-            await grist.selectedTable.update({
-              id: recordIdToUpdate,
-              fields: {
-                [fieldKey]: newValue
-              }
-            });
-            
-            console.log('Mise à jour réussie:', { id: recordIdToUpdate, [fieldKey]: newValue });
-            statusSpan.textContent = '✓ Enregistré';
-            statusSpan.style.color = '#16a34a';
-          } catch (err) {
-            console.error('Erreur mise à jour:', err);
-            statusSpan.textContent = '✗ Erreur';
-            statusSpan.style.color = '#dc2626';
-          }
-        } else {
-          statusSpan.textContent = '✓ Enregistré';
+    // Gérer le bouton "Valider les changements"
+    document.getElementById('validateAllBtn').addEventListener('click', async () => {
+      const validateBtn = document.getElementById('validateAllBtn');
+      const statusSpan = document.getElementById('updateStatus_all');
+      
+      statusSpan.textContent = '⏳';
+      statusSpan.style.color = 'var(--muted)';
+      validateBtn.disabled = true;
+      
+      const recordIdToUpdate = displayedCardRecordId || currentRowId;
+      
+      if (typeof grist !== 'undefined' && recordIdToUpdate) {
+        try {
+          // Collecter toutes les valeurs des checkboxes
+          const besoinMatKey = BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel';
+          const besoinMaintKey = BESOIN_MAINTENANCE.find(k => rec[k] !== undefined) || 'Besoin_maintenance';
+          const besoinForm26Key = BESOIN_FORMATION_26_27.find(k => rec[k] !== undefined) || 'Besoin_formation_26_27';
+          const besoinForm27Key = BESOIN_FORMATION_27_28.find(k => rec[k] !== undefined) || 'Besoin_formation_27_28';
+          
+          const fields = {
+            [besoinMatKey]: document.getElementById('besoinMatCheckbox').checked,
+            [besoinMaintKey]: document.getElementById('besoinMaintCheckbox').checked,
+            [besoinForm26Key]: document.getElementById('besoinForm26Checkbox').checked,
+            [besoinForm27Key]: document.getElementById('besoinForm27Checkbox').checked
+          };
+          
+          // Mettre à jour tous les champs à la fois
+          await grist.selectedTable.update({
+            id: recordIdToUpdate,
+            fields: fields
+          });
+          
+          console.log('Tous les changements enregistrés:', { id: recordIdToUpdate, ...fields });
+          statusSpan.textContent = '✓';
           statusSpan.style.color = '#16a34a';
+        } catch (err) {
+          console.error('Erreur mise à jour:', err);
+          statusSpan.textContent = '✗';
+          statusSpan.style.color = '#dc2626';
         }
-        
-        validateBtn.disabled = false;
-        
-        setTimeout(() => {
-          statusSpan.textContent = '';
-        }, 3000);
-      });
-    };
-    
-    // Créer les handlers pour chaque champ
-    createValidateHandler(
-      'besoinMatCheckbox', 
-      'updateStatus_besoinMat', 
-      'validateBtn_besoinMat',
-      BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel'
-    );
-    
-    createValidateHandler(
-      'besoinMaintCheckbox',
-      'updateStatus_besoinMaint',
-      'validateBtn_besoinMaint',
-      BESOIN_MAINTENANCE.find(k => rec[k] !== undefined) || 'Besoin_maintenance'
-    );
-    
-    createValidateHandler(
-      'besoinForm26Checkbox',
-      'updateStatus_besoinForm26',
-      'validateBtn_besoinForm26',
-      BESOIN_FORMATION_26_27.find(k => rec[k] !== undefined) || 'Besoin_formation_26_27'
-    );
-    
-    createValidateHandler(
-      'besoinForm27Checkbox',
-      'updateStatus_besoinForm27',
-      'validateBtn_besoinForm27',
-      BESOIN_FORMATION_27_28.find(k => rec[k] !== undefined) || 'Besoin_formation_27_28'
-    );
+      } else {
+        statusSpan.textContent = '✓';
+        statusSpan.style.color = '#16a34a';
+      }
+      
+      validateBtn.disabled = false;
+      
+      // Nettoyer le statut après 3 secondes
+      setTimeout(() => {
+        statusSpan.textContent = '';
+      }, 3000);
+    });
   }
 
   /* ════ CARTE COLLÈGE ════ */
