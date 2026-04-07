@@ -369,52 +369,35 @@
     document.getElementById('besoinMatCheckbox').addEventListener('change', async (e) => {
       const checkbox = e.target;
       const statusSpan = document.getElementById('updateStatus');
-      const newValue = checkbox.checked;
       const besoinMatKey = BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel';
       
       // Feedback immédiat
-      statusSpan.textContent = '⏳ Mise à jour...';
+      statusSpan.textContent = '⏳ Navigation...';
       statusSpan.style.color = 'var(--muted)';
       
       if (typeof grist !== 'undefined' && rec && rec.id) {
         try {
-          // Essayer de mettre à jour via l'API Grist documents
-          if (grist.docAPI && typeof grist.docAPI.applyUserActions === 'function') {
-            await grist.docAPI.applyUserActions([
-              ['UpdateRecord', rec.id, { [besoinMatKey]: newValue }]
-            ]);
-            statusSpan.textContent = '✓';
-            statusSpan.style.color = '#16a34a';
-          } else {
-            // Faire juste naviguer à la cellule et laisser Grist gérer
-            await grist.setCursorPosition({ rowId: rec.id, fieldName: besoinMatKey });
-            statusSpan.textContent = '✓';
-            statusSpan.style.color = '#16a34a';
-          }
+          // Naviguer vers la cellule pour édition
+          await grist.setCursorPosition({ rowId: rec.id, fieldName: besoinMatKey });
+          statusSpan.textContent = '✓';
+          statusSpan.style.color = '#16a34a';
         } catch (err) {
-          console.error('Erreur mise à jour:', err);
-          
-          // Essayer juste de naviguer
-          try {
-            await grist.setCursorPosition({ rowId: rec.id, fieldName: besoinMatKey });
-            statusSpan.textContent = '✓ (Grist)';
-            statusSpan.style.color = '#2563eb';
-          } catch (err2) {
-            statusSpan.textContent = '✗ Erreur';
-            statusSpan.style.color = '#dc2626';
-            console.error('Erreur navigation:', err2);
-          }
+          console.error('Erreur navigation:', err);
+          statusSpan.textContent = '✗';
+          statusSpan.style.color = '#dc2626';
+          // Revenir à l'état précédent si erreur
+          e.target.checked = !e.target.checked;
         }
       } else {
-        // Mode démo (sans Grist)
+        // Mode démo
         statusSpan.textContent = '✓';
         statusSpan.style.color = '#16a34a';
       }
       
-      // Nettoyer le statut après 3 secondes
+      // Nettoyer le statut après 2 secondes
       setTimeout(() => {
         statusSpan.textContent = '';
-      }, 3000);
+      }, 2000);
     });
   }
 
