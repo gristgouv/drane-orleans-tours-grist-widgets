@@ -369,27 +369,30 @@
     document.getElementById('besoinMatCheckbox').addEventListener('change', async (e) => {
       const checkbox = e.target;
       const statusSpan = document.getElementById('updateStatus');
+      const newValue = checkbox.checked;
       const besoinMatKey = BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel';
       
       // Feedback immédiat
-      statusSpan.textContent = '⏳ Navigation...';
+      statusSpan.textContent = '⏳';
       statusSpan.style.color = 'var(--muted)';
       
-      if (typeof grist !== 'undefined' && rec && rec.id) {
+      if (typeof grist !== 'undefined' && rec && rec.id && grist.docAPI) {
         try {
-          // Naviguer vers la cellule pour édition
-          await grist.setCursorPosition({ rowId: rec.id, fieldName: besoinMatKey });
+          // Utiliser docAPI.applyUserActions pour mettre à jour
+          const result = await grist.docAPI.applyUserActions([
+            ['UpdateRecord', rec.id, { [besoinMatKey]: newValue }]
+          ]);
           statusSpan.textContent = '✓';
           statusSpan.style.color = '#16a34a';
         } catch (err) {
-          console.error('Erreur navigation:', err);
+          console.error('Erreur mise à jour:', err);
           statusSpan.textContent = '✗';
           statusSpan.style.color = '#dc2626';
-          // Revenir à l'état précédent si erreur
-          e.target.checked = !e.target.checked;
+          // Revenir à l'état précédent
+          checkbox.checked = !checkbox.checked;
         }
       } else {
-        // Mode démo
+        // Mode démo sans Grist
         statusSpan.textContent = '✓';
         statusSpan.style.color = '#16a34a';
       }
