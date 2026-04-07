@@ -144,7 +144,17 @@
     .school-item-name { font-size: 11px; font-weight: 600; }
     .school-item-sub  { font-size: 10px; color: var(--muted); display: flex; gap: 6px; align-items: center; margin-top: 2px; }
 
-    /* Divider */
+    /* Checkbox section */
+    .checkbox-section { display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg); border-radius: 6px; }
+    .checkbox-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: var(--text); flex: 1; }
+    .checkbox-label input { cursor: pointer; width: 16px; height: 16px; }
+    .save-btn {
+      padding: 5px 12px; background: var(--accent); color: white; border: none; 
+      border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer;
+      transition: background .15s; flex-shrink: 0;
+    }
+    .save-btn:hover { background: #1d4ed8; }
+    .save-btn.saving { opacity: 0.6; cursor: not-allowed; }
     .card-divider { height: 1px; background: var(--border); margin: 12px 0; }
 
     /* ── Leaflet custom markers ── */
@@ -207,6 +217,7 @@
   const REUSSITE = ['moyenne_reussite','Moyenne_reussite'];
   const CONNEXION= ['indicateur_de_connexion','indicateur de connexion','Indicateur_de_connexion','Indicateur de connexion'];
   const RECONNECT= ['Reconnect','reconnect'];
+  const BESOIN_MATERIEL = ['Besoin_materiel', 'besoin_materiel', 'Besoin matériel'];
   const LAT_E    = ['latitude'];
   const LNG_E    = ['longitude'];
   // Coordonnées collège : recherche dynamique parmi toutes les clés du record
@@ -327,6 +338,7 @@
     const nomC = str(rec, NOM_C);
     const uaiC = str(rec, UAI_C);
     const reconnect = str(rec, RECONNECT);
+    const besoinMat = RES(rec, BESOIN_MATERIEL);
 
     document.getElementById('card-header').innerHTML = `
       <div class="card-type">🏫 École</div>
@@ -346,7 +358,86 @@
         ${indRow('📊','IPS moyen CM2',             fld(rec,IPS),       'ips',       1)}
         ${indRow('✅','Moy. réussite CM2',         fld(rec,REUSSITE),  'reussite',  2)}
         ${indRow('📶','Indicateur de connexion',   fld(rec,CONNEXION), 'connexion', 1)}
+      </div>
+      <div class="card-divider"></div>
+      <div class="ind-section">
+        <div class="ind-section-title">Informations</div>
+        <div class="checkbox-section">
+          <label class="checkbox-label">
+            <input type="checkbox" id="besoinMatCheckbox" ${besoinMat ? 'checked' : ''} />
+            <span>Besoin de matériel</span>
+          </label>
+          <button id="saveBtn" class="save-btn" data-record-id="${rec.id}">Mettre à jour</button>
+        </div>
       </div>`;
+
+    // Ajouter l'événement de changement et de sauvegarde
+    document.getElementById('besoinMatCheckbox').addEventListener('change', (e) => {
+      document.getElementById('saveBtn').style.opacity = '1';
+    });
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+      const saveBtn = document.getElementById('saveBtn');
+      const checkbox = document.getElementById('besoinMatCheckbox');
+      
+      if (typeof grist !== 'undefined' && rec && rec.id) {
+        saveBtn.classList.add('saving');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Mise à jour...';
+        
+        const besoinMatKey = BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel';
+        const newValue = checkbox.checked;
+        
+        try {
+          // Essayer d'utiliser applyUserActions avec docAPI
+          const actions = [
+            ['UpdateRecord', rec.id, { [besoinMatKey]: newValue }]
+          ];
+          
+          // Essayer différentes approches avec les APIs disponibles
+          if (grist.docAPI && typeof grist.docAPI.applyUserActions === 'function') {
+            await grist.docAPI.applyUserActions(actions);
+          } else if (grist.api && typeof grist.api.applyUserActions === 'function') {
+            await grist.api.applyUserActions(actions);
+          } else {
+            throw new Error('applyUserActions not available');
+          }
+          
+          saveBtn.textContent = '✓ Mis à jour';
+          saveBtn.style.background = '#16a34a';
+          
+          setTimeout(() => {
+            saveBtn.classList.remove('saving');
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Mettre à jour';
+            saveBtn.style.background = '';
+            // Rafraîchir l'affichage en rechargeant l'enregistrement
+            if (grist.setCursorPosition) {
+              grist.setCursorPosition({ rowId: rec.id });
+            }
+          }, 2000);
+        } catch (err) {
+          console.error('Erreur lors de la mise à jour:', err);
+          
+          // Fallback: naviguer vers la cellule pour édition via setCursorPosition
+          try {
+            await grist.setCursorPosition({ 
+              rowId: rec.id, 
+              fieldName: besoinMatKey 
+            });
+            saveBtn.textContent = 'Éditer dans Grist →';
+            saveBtn.style.background = '#d97706';
+          } catch (err2) {
+            saveBtn.textContent = 'Erreur écriture';
+            saveBtn.style.background = '#dc2626';
+            console.error('Erreur setCursorPosition:', err2);
+          }
+          
+          saveBtn.classList.remove('saving');
+          saveBtn.disabled = false;
+        }
+      }
+    });
   }
 
   /* ════ CARTE COLLÈGE ════ */
@@ -587,7 +678,7 @@
 
   /* ════ GRIST ════ */
   if (typeof grist !== 'undefined') {
-    grist.ready({ requiredAccess: 'read table' });
+    grist.ready({ requiredAccess: ['read table', 'write table'] });
     grist.onRecords(records => {
       allRecords = records;
       computeStats();
