@@ -376,57 +376,36 @@
       statusSpan.textContent = '⏳';
       statusSpan.style.color = 'var(--muted)';
       
-      if (typeof grist !== 'undefined' && rec && rec.id) {
+      if (typeof grist !== 'undefined' && currentRowId) {
         try {
-          // Approche 1: Essayer avec docAPI.applyUserActions
-          if (grist.docAPI && typeof grist.docAPI.applyUserActions === 'function') {
-            console.log('Tentative mise à jour:', { 
-              recordId: rec.id, 
-              field: besoinMatKey, 
-              value: newValue 
-            });
-            
-            // Essayer different formats d'action
-            try {
-              await grist.docAPI.applyUserActions([
-                ['UpdateRecord', rec.id, { [besoinMatKey]: newValue }]
-              ]);
-              console.log('Succès applyUserActions v1');
-              statusSpan.textContent = '✓';
-              statusSpan.style.color = '#16a34a';
-            } catch (err1) {
-              console.log('Format 1 échoué, essai format 2:', err1.message);
-              // Essayer un autre format
-              await grist.docAPI.applyUserActions([
-                ['UpdateRecord', '_grist_Tables_data', rec.id, { [besoinMatKey]: newValue }]
-              ]);
-              console.log('Succès applyUserActions v2');
-              statusSpan.textContent = '✓';
-              statusSpan.style.color = '#16a34a';
+          // Utiliser grist.selectedTable.update() pour mettre à jour
+          await grist.selectedTable.update({
+            id: currentRowId,
+            fields: {
+              [besoinMatKey]: newValue
             }
-          } else {
-            console.warn('docAPI.applyUserActions non disponible');
-            statusSpan.textContent = '?';
-            statusSpan.style.color = '#d97706';
-            checkbox.checked = !checkbox.checked;
-          }
+          });
+          
+          console.log('Mise à jour réussie:', { id: currentRowId, [besoinMatKey]: newValue });
+          statusSpan.textContent = '✓';
+          statusSpan.style.color = '#16a34a';
         } catch (err) {
-          console.error('Erreur complète:', err);
+          console.error('Erreur mise à jour:', err);
           statusSpan.textContent = '✗';
           statusSpan.style.color = '#dc2626';
           // Revenir à l'état précédent
           checkbox.checked = !checkbox.checked;
         }
       } else {
-        // Mode démo sans Grist
+        // Mode démo ou pas de rowId
         statusSpan.textContent = '✓';
         statusSpan.style.color = '#16a34a';
       }
       
-      // Nettoyer le statut après 3 secondes
+      // Nettoyer le statut après 2 secondes
       setTimeout(() => {
         statusSpan.textContent = '';
-      }, 3000);
+      }, 2000);
     });
   }
 
@@ -649,7 +628,10 @@
   }
 
   /* ════ GRIST onRecord (surligner l'école sélectionnée) ════ */
+  let currentRowId = null;
+  
   function highlightRecord(rec) {
+    currentRowId = rec?.id || null;
     if (!rec || mode !== 'ecoles') return;
     const uaiE = str(rec, UAI_E);
     const found = markers.find(m => m._rec && str(m._rec, UAI_E) === uaiE);
