@@ -149,6 +149,13 @@
     .checkbox-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: var(--text); flex: 1; }
     .checkbox-label input { cursor: pointer; width: 16px; height: 16px; }
     .update-status { font-size: 9px; color: var(--muted); transition: all .3s; }
+    .validate-btn {
+      padding: 5px 10px; background: var(--accent); color: white; border: none; 
+      border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer;
+      transition: background .15s; flex-shrink: 0;
+    }
+    .validate-btn:hover { background: #1d4ed8; }
+    .validate-btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .card-divider { height: 1px; background: var(--border); margin: 12px 0; }
 
     /* ── Leaflet custom markers ── */
@@ -198,6 +205,8 @@
   let mode = 'ecoles';
   let markers = [];
   let selectedMarker = null;
+  let currentRowId = null;
+  let displayedCardRecordId = null;
   let STATS = { ordi:{}, ips:{}, reussite:{}, connexion:{} };
 
   /* ════ COLONNES ════ */
@@ -327,6 +336,7 @@
 
   /* ════ CARTE ÉCOLE ════ */
   function renderSchoolCard(rec) {
+    displayedCardRecordId = rec.id;  // Stocker l'ID du record affiché
     const nomE = str(rec, NOM_E);
     const uaiE = str(rec, UAI_E);
     const nomC = str(rec, NOM_C);
@@ -361,51 +371,57 @@
             <input type="checkbox" id="besoinMatCheckbox" ${besoinMat ? 'checked' : ''} />
             <span>Besoin de matériel</span>
           </label>
-          <span id="updateStatus" class="update-status"></span>
+          <button id="validateBtn" class="validate-btn">Valider</button>
         </div>
+        <span id="updateStatus" class="update-status"></span>
       </div>`;
 
-    // Gérer les changements du checkbox en temps réel
-    document.getElementById('besoinMatCheckbox').addEventListener('change', async (e) => {
-      const checkbox = e.target;
+    // Gérer le clic sur le bouton Valider
+    document.getElementById('validateBtn').addEventListener('click', async () => {
+      const checkbox = document.getElementById('besoinMatCheckbox');
       const statusSpan = document.getElementById('updateStatus');
+      const validateBtn = document.getElementById('validateBtn');
       const newValue = checkbox.checked;
       const besoinMatKey = BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel';
       
       // Feedback immédiat
-      statusSpan.textContent = '⏳';
+      statusSpan.textContent = '⏳ Mise à jour...';
       statusSpan.style.color = 'var(--muted)';
+      validateBtn.disabled = true;
       
-      if (typeof grist !== 'undefined' && currentRowId) {
+      // Utiliser l'ID du record actuellement affiché
+      const recordIdToUpdate = displayedCardRecordId || currentRowId;
+      
+      if (typeof grist !== 'undefined' && recordIdToUpdate) {
         try {
           // Utiliser grist.selectedTable.update() pour mettre à jour
           await grist.selectedTable.update({
-            id: currentRowId,
+            id: recordIdToUpdate,
             fields: {
               [besoinMatKey]: newValue
             }
           });
           
-          console.log('Mise à jour réussie:', { id: currentRowId, [besoinMatKey]: newValue });
-          statusSpan.textContent = '✓';
+          console.log('Mise à jour réussie:', { id: recordIdToUpdate, [besoinMatKey]: newValue });
+          statusSpan.textContent = '✓ Enregistré';
           statusSpan.style.color = '#16a34a';
         } catch (err) {
           console.error('Erreur mise à jour:', err);
-          statusSpan.textContent = '✗';
+          statusSpan.textContent = '✗ Erreur';
           statusSpan.style.color = '#dc2626';
-          // Revenir à l'état précédent
-          checkbox.checked = !checkbox.checked;
         }
       } else {
-        // Mode démo ou pas de rowId
-        statusSpan.textContent = '✓';
+        // Mode démo
+        statusSpan.textContent = '✓ Enregistré';
         statusSpan.style.color = '#16a34a';
       }
       
-      // Nettoyer le statut après 2 secondes
+      validateBtn.disabled = false;
+      
+      // Nettoyer le statut après 3 secondes
       setTimeout(() => {
         statusSpan.textContent = '';
-      }, 2000);
+      }, 3000);
     });
   }
 
