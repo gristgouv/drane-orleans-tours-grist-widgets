@@ -214,13 +214,16 @@
   const UAI_C    = ['UAI_college'];
   const NOM_C    = ['Nom_du_coll_ge_associ_','Nom du collège associé','Nom_du_college_associe'];
   const UAI_E    = ['UAI_ecole'];
-  const NOM_E    = ['Appellation_officielle__cole','Appellation officielle école','Appellation_officielle_ecole'];
+  const NOM_E    = ['Appelation_officielle_ecole_et_nom_vile'];
   const ORDI     = ['Indicateur_ordinateurs','Indicateur ordinateurs','indicateur_ordinateurs'];
   const IPS      = ['IPS_moyen_CM2','IPS moyen CM2'];
   const REUSSITE = ['moyenne_reussite','Moyenne_reussite'];
   const CONNEXION= ['indicateur_de_connexion','indicateur de connexion','Indicateur_de_connexion','Indicateur de connexion'];
   const RECONNECT= ['Reconnect','reconnect'];
   const BESOIN_MATERIEL = ['Besoin_materiel', 'besoin_materiel', 'Besoin matériel'];
+  const BESOIN_MAINTENANCE = ['Besoin_maintenance', 'besoin_maintenance', 'Besoin maintenance'];
+  const BESOIN_FORMATION_26_27 = ['Besoin_formation_26_27', 'besoin_formation_26_27', 'Besoin formation 26-27'];
+  const BESOIN_FORMATION_27_28 = ['Besoin_formation_27_28', 'besoin_formation_27_28', 'Besoin formation 27-28'];
   const LAT_E    = ['latitude'];
   const LNG_E    = ['longitude'];
   // Coordonnées collège : recherche dynamique parmi toutes les clés du record
@@ -343,6 +346,9 @@
     const uaiC = str(rec, UAI_C);
     const reconnect = str(rec, RECONNECT);
     const besoinMat = RES(rec, BESOIN_MATERIEL);
+    const besoinMaint = RES(rec, BESOIN_MAINTENANCE);
+    const besoinForm26 = RES(rec, BESOIN_FORMATION_26_27);
+    const besoinForm27 = RES(rec, BESOIN_FORMATION_27_28);
 
     document.getElementById('card-header').innerHTML = `
       <div class="card-type">🏫 École</div>
@@ -365,64 +371,117 @@
       </div>
       <div class="card-divider"></div>
       <div class="ind-section">
-        <div class="ind-section-title">Informations</div>
+        <div class="ind-section-title">Besoins</div>
+        
         <div class="checkbox-section">
           <label class="checkbox-label">
             <input type="checkbox" id="besoinMatCheckbox" ${besoinMat ? 'checked' : ''} />
             <span>Besoin de matériel</span>
           </label>
-          <button id="validateBtn" class="validate-btn">Valider</button>
+          <button id="validateBtn_besoinMat" class="validate-btn">Valider</button>
         </div>
-        <span id="updateStatus" class="update-status"></span>
+        <span id="updateStatus_besoinMat" class="update-status"></span>
+        
+        <div class="checkbox-section" style="margin-top:8px">
+          <label class="checkbox-label">
+            <input type="checkbox" id="besoinMaintCheckbox" ${besoinMaint ? 'checked' : ''} />
+            <span>Besoin de maintenance</span>
+          </label>
+          <button id="validateBtn_besoinMaint" class="validate-btn">Valider</button>
+        </div>
+        <span id="updateStatus_besoinMaint" class="update-status"></span>
+        
+        <div class="checkbox-section" style="margin-top:8px">
+          <label class="checkbox-label">
+            <input type="checkbox" id="besoinForm26Checkbox" ${besoinForm26 ? 'checked' : ''} />
+            <span>Besoin formation 2026-27</span>
+          </label>
+          <button id="validateBtn_besoinForm26" class="validate-btn">Valider</button>
+        </div>
+        <span id="updateStatus_besoinForm26" class="update-status"></span>
+        
+        <div class="checkbox-section" style="margin-top:8px">
+          <label class="checkbox-label">
+            <input type="checkbox" id="besoinForm27Checkbox" ${besoinForm27 ? 'checked' : ''} />
+            <span>Besoin formation 2027-28</span>
+          </label>
+          <button id="validateBtn_besoinForm27" class="validate-btn">Valider</button>
+        </div>
+        <span id="updateStatus_besoinForm27" class="update-status"></span>
       </div>`;
 
-    // Gérer le clic sur le bouton Valider
-    document.getElementById('validateBtn').addEventListener('click', async () => {
-      const checkbox = document.getElementById('besoinMatCheckbox');
-      const statusSpan = document.getElementById('updateStatus');
-      const validateBtn = document.getElementById('validateBtn');
-      const newValue = checkbox.checked;
-      const besoinMatKey = BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel';
-      
-      // Feedback immédiat
-      statusSpan.textContent = '⏳ Mise à jour...';
-      statusSpan.style.color = 'var(--muted)';
-      validateBtn.disabled = true;
-      
-      // Utiliser l'ID du record actuellement affiché
-      const recordIdToUpdate = displayedCardRecordId || currentRowId;
-      
-      if (typeof grist !== 'undefined' && recordIdToUpdate) {
-        try {
-          // Utiliser grist.selectedTable.update() pour mettre à jour
-          await grist.selectedTable.update({
-            id: recordIdToUpdate,
-            fields: {
-              [besoinMatKey]: newValue
-            }
-          });
-          
-          console.log('Mise à jour réussie:', { id: recordIdToUpdate, [besoinMatKey]: newValue });
+    // Fonction helper pour créer les event listeners
+    const createValidateHandler = (checkboxId, statusId, btnId, fieldKey) => {
+      document.getElementById(btnId).addEventListener('click', async () => {
+        const checkbox = document.getElementById(checkboxId);
+        const statusSpan = document.getElementById(statusId);
+        const validateBtn = document.getElementById(btnId);
+        const newValue = checkbox.checked;
+        
+        statusSpan.textContent = '⏳ Mise à jour...';
+        statusSpan.style.color = 'var(--muted)';
+        validateBtn.disabled = true;
+        
+        const recordIdToUpdate = displayedCardRecordId || currentRowId;
+        
+        if (typeof grist !== 'undefined' && recordIdToUpdate) {
+          try {
+            await grist.selectedTable.update({
+              id: recordIdToUpdate,
+              fields: {
+                [fieldKey]: newValue
+              }
+            });
+            
+            console.log('Mise à jour réussie:', { id: recordIdToUpdate, [fieldKey]: newValue });
+            statusSpan.textContent = '✓ Enregistré';
+            statusSpan.style.color = '#16a34a';
+          } catch (err) {
+            console.error('Erreur mise à jour:', err);
+            statusSpan.textContent = '✗ Erreur';
+            statusSpan.style.color = '#dc2626';
+          }
+        } else {
           statusSpan.textContent = '✓ Enregistré';
           statusSpan.style.color = '#16a34a';
-        } catch (err) {
-          console.error('Erreur mise à jour:', err);
-          statusSpan.textContent = '✗ Erreur';
-          statusSpan.style.color = '#dc2626';
         }
-      } else {
-        // Mode démo
-        statusSpan.textContent = '✓ Enregistré';
-        statusSpan.style.color = '#16a34a';
-      }
-      
-      validateBtn.disabled = false;
-      
-      // Nettoyer le statut après 3 secondes
-      setTimeout(() => {
-        statusSpan.textContent = '';
-      }, 3000);
-    });
+        
+        validateBtn.disabled = false;
+        
+        setTimeout(() => {
+          statusSpan.textContent = '';
+        }, 3000);
+      });
+    };
+    
+    // Créer les handlers pour chaque champ
+    createValidateHandler(
+      'besoinMatCheckbox', 
+      'updateStatus_besoinMat', 
+      'validateBtn_besoinMat',
+      BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel'
+    );
+    
+    createValidateHandler(
+      'besoinMaintCheckbox',
+      'updateStatus_besoinMaint',
+      'validateBtn_besoinMaint',
+      BESOIN_MAINTENANCE.find(k => rec[k] !== undefined) || 'Besoin_maintenance'
+    );
+    
+    createValidateHandler(
+      'besoinForm26Checkbox',
+      'updateStatus_besoinForm26',
+      'validateBtn_besoinForm26',
+      BESOIN_FORMATION_26_27.find(k => rec[k] !== undefined) || 'Besoin_formation_26_27'
+    );
+    
+    createValidateHandler(
+      'besoinForm27Checkbox',
+      'updateStatus_besoinForm27',
+      'validateBtn_besoinForm27',
+      BESOIN_FORMATION_27_28.find(k => rec[k] !== undefined) || 'Besoin_formation_27_28'
+    );
   }
 
   /* ════ CARTE COLLÈGE ════ */
