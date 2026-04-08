@@ -714,24 +714,8 @@
       renderMarkers(document.getElementById('searchInput').value);
     });
     grist.onRecord(rec => highlightRecord(rec));
-  } else {
-    // ── Démo ──
-    // Démo hors Grist — données réelles du CSV avec college_latitude / college_longitude
-    allRecords = [
-      { id:1,  UAI_college:"0410793P", "Nom du collège associé":"  LEONARD DE VINCI",     college_latitude:47.3519697412826,  college_longitude:1.747099768460217,  UAI_ecole:"0410373H", "Appellation officielle école":"Ecole élémentaire Louise de Savoie",          latitude:47.348459, longitude:1.751619, "Indicateur ordinateurs":"",     "IPS moyen CM2":"84.21", moyenne_reussite:"",     "indicateur de connexion":"32.18", Reconnect:"Besoin très prioritaire"  },
-      { id:2,  UAI_college:"0280918W", "Nom du collège associé":"  ANATOLE FRANCE",        college_latitude:48.08122894306669, college_longitude:1.3505998889199298, UAI_ecole:"0280070Z", "Appellation officielle école":"Ecole élémentaire Jean Macé",               latitude:48.080079, longitude:1.345510, "Indicateur ordinateurs":"0.11",  "IPS moyen CM2":"75.51", moyenne_reussite:"1.76", "indicateur de connexion":"1.0",  Reconnect:"Besoin très prioritaire"  },
-      { id:3,  UAI_college:"0280918W", "Nom du collège associé":"  ANATOLE FRANCE",        college_latitude:48.08122894306669, college_longitude:1.3505998889199298, UAI_ecole:"0280071A", "Appellation officielle école":"Ecole élémentaire Ronsard",                 latitude:48.113000, longitude:1.331500, "Indicateur ordinateurs":"0.07",  "IPS moyen CM2":"71.20", moyenne_reussite:"1.85", "indicateur de connexion":"5.0",  Reconnect:"Besoin très prioritaire"  },
-      { id:4,  UAI_college:"0180766K", "Nom du collège associé":"  LE GRAND MEAULNES",     college_latitude:47.09925740483433, college_longitude:2.411889927344315,  UAI_ecole:"0180637V", "Appellation officielle école":"Ecole élémentaire Barbottes",              latitude:47.096731, longitude:2.415039, "Indicateur ordinateurs":"",     "IPS moyen CM2":"83.87", moyenne_reussite:"2.06", "indicateur de connexion":"",     Reconnect:"Besoin très prioritaire"  },
-      { id:5,  UAI_college:"0180037T", "Nom du collège associé":"  EDOUARD VAILLANT",      college_latitude:47.22901272285669, college_longitude:2.067109670515711,  UAI_ecole:"0180661W", "Appellation officielle école":"Ecole primaire Pierre Bodin",              latitude:47.224084, longitude:2.082270, "Indicateur ordinateurs":"",     "IPS moyen CM2":"78.62", moyenne_reussite:"1.97", "indicateur de connexion":"37.28", Reconnect:"Besoin très prioritaire"  },
-      { id:6,  UAI_college:"0410952M", "Nom du collège associé":"  FRANCOIS RABELAIS",     college_latitude:47.59447789620516, college_longitude:1.3163799783909147, UAI_ecole:"0410786G", "Appellation officielle école":"Ecole élémentaire Cécile ROL-TANGUY",     latitude:47.596731, longitude:1.308450, "Indicateur ordinateurs":"0.04",  "IPS moyen CM2":"66.41", moyenne_reussite:"2.10", "indicateur de connexion":"",     Reconnect:"Besoin très prioritaire"  },
-      { id:7,  UAI_college:"0410003F", "Nom du collège associé":"  BLOIS BEGON",            college_latitude:47.59353380851998, college_longitude:1.3079994744129546, UAI_ecole:"0410004G", "Appellation officielle école":"Ecole élémentaire Albert Camus",           latitude:47.590000, longitude:1.315000, "Indicateur ordinateurs":"0.12",  "IPS moyen CM2":"74.53", moyenne_reussite:"2.20", "indicateur de connexion":"12.0", Reconnect:"Besoin prioritaire"       },
-      { id:8,  UAI_college:"0450939B", "Nom du collège associé":"  ALAIN FOURNIER",         college_latitude:47.83242530469332, college_longitude:1.9304602299494635, UAI_ecole:"0450913Y", "Appellation officielle école":"Ecole élémentaire René-Guy Cadou",         latitude:47.830257, longitude:1.931142, "Indicateur ordinateurs":"",     "IPS moyen CM2":"77.50", moyenne_reussite:"2.13", "indicateur de connexion":"1.78", Reconnect:"Besoin très prioritaire"  },
-      { id:9,  UAI_college:"0451070U", "Nom du collège associé":"  MONTESQUIEU",            college_latitude:47.83315726987095, college_longitude:1.9364195008661584, UAI_ecole:"0451071V", "Appellation officielle école":"Ecole élémentaire Jules Ferry",             latitude:47.835000, longitude:1.940000, "Indicateur ordinateurs":"0.18",  "IPS moyen CM2":"81.60", moyenne_reussite:"2.25", "indicateur de connexion":"8.0",  Reconnect:"Besoin prioritaire"       },
-      { id:10, UAI_college:"0280716B", "Nom du collège associé":"  PIERRE ET MARIE CURIE",  college_latitude:48.73624192079555, college_longitude:1.3878305301418514, UAI_ecole:"0280112V", "Appellation officielle école":"Ecole élémentaire Antoine de Saint-Exupéry", latitude:48.737073, longitude:1.392850, "Indicateur ordinateurs":"0.07",  "IPS moyen CM2":"78.91", moyenne_reussite:"2.07", "indicateur de connexion":"",     Reconnect:"Besoin moins prioritaire" },
-    ];
-    computeStats();
-    renderMarkers('');
   }
+
 </script>
 </body>
 </html>
