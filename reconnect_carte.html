@@ -261,6 +261,13 @@
     const v = RES(rec, keys);
     return (v === undefined || v === null) ? '' : String(v).trim();
   }
+  function toBool(val) {
+    if (val === null || val === undefined) return false;
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'number') return val !== 0;
+    const s = String(val).toLowerCase().trim();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'oui';
+  }
 
   /* ════ STATS ════ */
   function computeStats() {
@@ -375,28 +382,28 @@
         
         <div class="checkbox-section">
           <label class="checkbox-label">
-            <input type="checkbox" id="besoinMatCheckbox" ${besoinMat ? 'checked' : ''} />
+            <input type="checkbox" id="besoinMatCheckbox" ${toBool(besoinMat) ? 'checked' : ''} />
             <span>Besoin de matériel</span>
           </label>
         </div>
         
         <div class="checkbox-section" style="margin-top:8px">
           <label class="checkbox-label">
-            <input type="checkbox" id="besoinMaintCheckbox" ${besoinMaint ? 'checked' : ''} />
+            <input type="checkbox" id="besoinMaintCheckbox" ${toBool(besoinMaint) ? 'checked' : ''} />
             <span>Besoin de maintenance</span>
           </label>
         </div>
         
         <div class="checkbox-section" style="margin-top:8px">
           <label class="checkbox-label">
-            <input type="checkbox" id="besoinForm26Checkbox" ${besoinForm26 ? 'checked' : ''} />
+            <input type="checkbox" id="besoinForm26Checkbox" ${toBool(besoinForm26) ? 'checked' : ''} />
             <span>Besoin formation 2026-27</span>
           </label>
         </div>
         
         <div class="checkbox-section" style="margin-top:8px">
           <label class="checkbox-label">
-            <input type="checkbox" id="besoinForm27Checkbox" ${besoinForm27 ? 'checked' : ''} />
+            <input type="checkbox" id="besoinForm27Checkbox" ${toBool(besoinForm27) ? 'checked' : ''} />
             <span>Besoin formation 2027-28</span>
           </label>
         </div>
