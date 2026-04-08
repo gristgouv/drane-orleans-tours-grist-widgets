@@ -253,6 +253,14 @@
   const BESOIN_FORMATION_27_28 = ['Besoin_formation_27_28', 'besoin_formation_27_28', 'Besoin formation 27-28'];
   const RESOLVE = (rec, keys) => { for (const k of keys) if (rec[k] !== undefined) return rec[k]; return undefined; };
 
+  function toBool(val) {
+    if (val === null || val === undefined) return false;
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'number') return val !== 0;
+    const s = String(val).toLowerCase().trim();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'oui';
+  }
+
   function fld(rec, keys) {
     const v = RESOLVE(rec, keys);
     if (v === undefined || v === null || String(v).trim() === '') return null;
@@ -535,10 +543,10 @@
     const besoinForm26 = RESOLVE(rec, BESOIN_FORMATION_26_27);
     const besoinForm27 = RESOLVE(rec, BESOIN_FORMATION_27_28);
     
-    document.getElementById('check_materiel').checked = !!besoinMat;
-    document.getElementById('check_maintenance').checked = !!besoinMaint;
-    document.getElementById('check_form26').checked = !!besoinForm26;
-    document.getElementById('check_form27').checked = !!besoinForm27;
+    document.getElementById('check_materiel').checked = toBool(besoinMat);
+    document.getElementById('check_maintenance').checked = toBool(besoinMaint);
+    document.getElementById('check_form26').checked = toBool(besoinForm26);
+    document.getElementById('check_form27').checked = toBool(besoinForm27);
     
     document.querySelector('.besoins-title').textContent = `✏️ ${escHtml(ecoleNom)}`;
     document.getElementById('besoinsPanel').classList.add('show');
