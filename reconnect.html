@@ -148,6 +148,27 @@
     .empty svg { width: 36px; height: 36px; stroke: var(--border); fill: none; stroke-width: 1.5; margin-bottom: 8px; }
 
     mark { background: var(--aclt); color: var(--accent); border-radius: 2px; padding: 0 1px; }
+
+    /* ─ Section édition besoins ─ */
+    #besoinsPanel {
+      margin-top: 12px; padding: 14px; background: var(--surface);
+      border: 1.5px solid var(--border); border-radius: var(--r);
+      display: none;
+    }
+    #besoinsPanel.show { display: block; }
+    .besoins-title { font-weight: 700; font-size: 12px; color: var(--text); margin-bottom: 10px; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+    .checkbox-row label { cursor: pointer; font-size: 12px; flex: 1; }
+    .besoins-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .btn-validate {
+      padding: 8px 14px; background: var(--accent); color: white; border: none;
+      border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-validate:hover { background: #1d4ed8; }
+    .btn-validate:disabled { opacity: 0.6; cursor: not-allowed; }
+    .besoins-status { font-size: 10px; color: var(--muted); margin-left: auto; }
   </style>
 </head>
 <body>
@@ -175,10 +196,38 @@
 <div id="status">En attente des données Grist…</div>
 <div id="container"></div>
 
+<!-- Section d'édition des besoins -->
+<div id="besoinsPanel">
+  <div class="besoins-title">✏️ Éditer les besoins</div>
+  <div class="checkbox-row">
+    <input type="checkbox" id="check_materiel" />
+    <label for="check_materiel">Besoin de matériel</label>
+  </div>
+  <div class="checkbox-row">
+    <input type="checkbox" id="check_maintenance" />
+    <label for="check_maintenance">Besoin de maintenance</label>
+  </div>
+  <div class="checkbox-row">
+    <input type="checkbox" id="check_form26" />
+    <label for="check_form26">Besoin formation 2026-27</label>
+  </div>
+  <div class="checkbox-row">
+    <input type="checkbox" id="check_form27" />
+    <label for="check_form27">Besoin formation 2027-28</label>
+  </div>
+  <div class="besoins-actions">
+    <button id="validateBesoinsBtn" class="btn-validate">Valider les changements</button>
+    <span id="besoinsStatus" class="besoins-status"></span>
+    <button id="closeBesoinsBtn" class="btn-validate" style="background:#94a3b8;margin-left:auto">Fermer</button>
+  </div>
+</div>
+
 <script>
   let allRecords = [];
   let mode = 'ecoles';
   let STATS = { ordi:{}, ips:{}, reussite:{}, connexion:{} };
+  let selectedRecordId = null;
+  let displayedCardRecordId = null;
 
   /* ════ COLONNES ════ */
   const UAI_C    = ['UAI_college'];
@@ -190,6 +239,10 @@
   const REUSSITE = ['moyenne_reussite','Moyenne_reussite'];
   const CONNEXION= ['indicateur_de_connexion','indicateur de connexion','Indicateur_de_connexion','Indicateur de connexion'];
   const RECONNECT= ['Reconnect','reconnect'];
+  const BESOIN_MATERIEL = ['Besoin_materiel', 'besoin_materiel', 'Besoin matériel'];
+  const BESOIN_MAINTENANCE = ['Besoin_maintenance', 'besoin_maintenance', 'Besoin maintenance'];
+  const BESOIN_FORMATION_26_27 = ['Besoin_formation_26_27', 'besoin_formation_26_27', 'Besoin formation 26-27'];
+  const BESOIN_FORMATION_27_28 = ['Besoin_formation_27_28', 'besoin_formation_27_28', 'Besoin formation 27-28'];
   const RESOLVE = (rec, keys) => { for (const k of keys) if (rec[k] !== undefined) return rec[k]; return undefined; };
 
   function fld(rec, keys) {
@@ -310,7 +363,8 @@
     const uaiE  = str(rec, UAI_E);
     const nomC  = str(rec, NOM_C);
     const reconn= str(rec, RECONNECT);
-    return `<tr>
+    const rowId = `ecole-row-${rec.id}`;
+    return `<tr id="${rowId}" style="cursor:pointer" onclick="editEcole(event, ${rec.id}, '${nomE.replace(/'/g, "\\'")}')">
       <td class="cell-id">
         <div class="ecole-name">${highlight(nomE||'—', query)}</div>
         <div class="ecole-sub"><span class="tag-uai">${escHtml(uaiE)}</span></div>
@@ -458,6 +512,36 @@
     }).join('');
   }
 
+  /* ════ GESTION ÉDITION DES BESOINS ════ */
+  function editEcole(e, recordId, ecoleNom) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    displayedCardRecordId = recordId;
+    const rec = allRecords.find(r => r.id === recordId);
+    if (!rec) return;
+    
+    // Remplir la section d'édition avec les valeurs actuelles
+    const besoinMat = RESOLVE(rec, BESOIN_MATERIEL);
+    const besoinMaint = RESOLVE(rec, BESOIN_MAINTENANCE);
+    const besoinForm26 = RESOLVE(rec, BESOIN_FORMATION_26_27);
+    const besoinForm27 = RESOLVE(rec, BESOIN_FORMATION_27_28);
+    
+    document.getElementById('check_materiel').checked = !!besoinMat;
+    document.getElementById('check_maintenance').checked = !!besoinMaint;
+    document.getElementById('check_form26').checked = !!besoinForm26;
+    document.getElementById('check_form27').checked = !!besoinForm27;
+    
+    document.querySelector('.besoins-title').textContent = `✏️ ${escHtml(ecoleNom)}`;
+    document.getElementById('besoinsPanel').classList.add('show');
+    document.getElementById('besoinsStatus').textContent = '';
+  }
+  
+  function closeBesoinsPanel() {
+    document.getElementById('besoinsPanel').classList.remove('show');
+    displayedCardRecordId = null;
+  }
+
   /* ════ DISPATCH ════ */
   function render(query) {
     if (mode === 'ecoles') renderEcoles(query);
@@ -484,6 +568,55 @@
 
   /* ════ GRIST ════ */
   document.getElementById('searchInput').addEventListener('input', e => render(e.target.value));
+  
+  // Event listeners pour la section d'édition des besoins
+  document.getElementById('validateBesoinsBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('validateBesoinsBtn');
+    const status = document.getElementById('besoinsStatus');
+    
+    status.textContent = '⏳';
+    btn.disabled = true;
+    
+    if (typeof grist !== 'undefined' && displayedCardRecordId) {
+      try {
+        const rec = allRecords.find(r => r.id === displayedCardRecordId);
+        if (!rec) throw new Error('Enregistrement non trouvé');
+        
+        const besoinMatKey = BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel';
+        const besoinMaintKey = BESOIN_MAINTENANCE.find(k => rec[k] !== undefined) || 'Besoin_maintenance';
+        const besoinForm26Key = BESOIN_FORMATION_26_27.find(k => rec[k] !== undefined) || 'Besoin_formation_26_27';
+        const besoinForm27Key = BESOIN_FORMATION_27_28.find(k => rec[k] !== undefined) || 'Besoin_formation_27_28';
+        
+        const fields = {
+          [besoinMatKey]: document.getElementById('check_materiel').checked,
+          [besoinMaintKey]: document.getElementById('check_maintenance').checked,
+          [besoinForm26Key]: document.getElementById('check_form26').checked,
+          [besoinForm27Key]: document.getElementById('check_form27').checked
+        };
+        
+        await grist.selectedTable.update({
+          id: displayedCardRecordId,
+          fields: fields
+        });
+        
+        console.log('Mise à jour réussie:', fields);
+        status.textContent = '✓';
+        status.style.color = '#16a34a';
+      } catch (err) {
+        console.error('Erreur:', err);
+        status.textContent = '✗ Erreur';
+        status.style.color = '#dc2626';
+      }
+    } else {
+      status.textContent = '✓';
+      status.style.color = '#16a34a';
+    }
+    
+    btn.disabled = false;
+    setTimeout(() => { status.textContent = ''; }, 2000);
+  });
+  
+  document.getElementById('closeBesoinsBtn').addEventListener('click', closeBesoinsPanel);
 
   if (typeof grist !== 'undefined') {
     grist.ready({ requiredAccess: 'read table' });
