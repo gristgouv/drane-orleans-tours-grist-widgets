@@ -236,6 +236,7 @@
   let STATS = { ordi:{}, ips:{}, reussite:{}, connexion:{} };
   let selectedRecordId = null;
   let displayedCardRecordId = null;
+  let displayedEcoleUAI = null;
 
   /* ════ COLONNES ════ */
   const UAI_C    = ['UAI_college'];
@@ -537,6 +538,9 @@
     const rec = allRecords.find(r => r.id === recordId);
     if (!rec) return;
     
+    // Extraire l'UAI pour identifier les doublons
+    displayedEcoleUAI = RESOLVE(rec, UAI_E);
+    
     // Remplir la section d'édition avec les valeurs actuelles
     const besoinMat = RESOLVE(rec, BESOIN_MATERIEL);
     const besoinMaint = RESOLVE(rec, BESOIN_MAINTENANCE);
@@ -558,6 +562,7 @@
     document.getElementById('besoinsPanel').classList.remove('show');
     document.body.classList.remove('besoins-open');
     displayedCardRecordId = null;
+    displayedEcoleUAI = null;
   }
   
   // Fermer le panel en cliquant sur le backdrop
@@ -603,33 +608,36 @@
     status.textContent = '⏳';
     btn.disabled = true;
     
-    if (typeof grist !== 'undefined' && displayedCardRecordId) {
+    if (typeof grist !== 'undefined' && displayedCardRecordId && displayedEcoleUAI) {
       try {
-        const rec = allRecords.find(r => r.id === displayedCardRecordId);
-        if (!rec) throw new Error('Enregistrement non trouvé');
+        // Trouver tous les records avec le même UAI (doublons)
+        const recordsToUpdate = allRecords.filter(r => RESOLVE(r, UAI_E) === displayedEcoleUAI);
         
-        const besoinMatKey = BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel';
-        const besoinMaintKey = BESOIN_MAINTENANCE.find(k => rec[k] !== undefined) || 'Besoin_maintenance';
-        const besoinForm26Key = BESOIN_FORMATION_26_27.find(k => rec[k] !== undefined) || 'Besoin_formation_26_27';
-        const besoinForm27Key = BESOIN_FORMATION_27_28.find(k => rec[k] !== undefined) || 'Besoin_formation_27_28';
+        if (!recordsToUpdate.length) throw new Error('Aucun enregistrement trouvé');
         
-        const fields = {
-          [besoinMatKey]: document.getElementById('check_materiel').checked,
-          [besoinMaintKey]: document.getElementById('check_maintenance').checked,
-          [besoinForm26Key]: document.getElementById('check_form26').checked,
-          [besoinForm27Key]: document.getElementById('check_form27').checked
-        };
+        // Mettre à jour tous ces records avec les mêmes valeurs
+        for (const rec of recordsToUpdate) {
+          const besoinMatKey = BESOIN_MATERIEL.find(k => rec[k] !== undefined) || 'Besoin_materiel';
+          const besoinMaintKey = BESOIN_MAINTENANCE.find(k => rec[k] !== undefined) || 'Besoin_maintenance';
+          const besoinForm26Key = BESOIN_FORMATION_26_27.find(k => rec[k] !== undefined) || 'Besoin_formation_26_27';
+          const besoinForm27Key = BESOIN_FORMATION_27_28.find(k => rec[k] !== undefined) || 'Besoin_formation_27_28';
+          
+          const fields = {
+            [besoinMatKey]: document.getElementById('check_materiel').checked,
+            [besoinMaintKey]: document.getElementById('check_maintenance').checked,
+            [besoinForm26Key]: document.getElementById('check_form26').checked,
+            [besoinForm27Key]: document.getElementById('check_form27').checked
+          };
+          
+          await grist.selectedTable.update({
+            id: rec.id,
+            fields: fields
+          });
+        }
         
-        await grist.selectedTable.update({
-          id: displayedCardRecordId,
-          fields: fields
-        });
-        
-        console.log('Mise à jour réussie:', fields);
         status.textContent = '✓';
         status.style.color = '#16a34a';
       } catch (err) {
-        console.error('Erreur:', err);
         status.textContent = '✗ Erreur';
         status.style.color = '#dc2626';
       }
