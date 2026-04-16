@@ -182,6 +182,7 @@
       margin-bottom: 6px;
     }
     .config-section select,
+    .config-section input[type="text"],
     .config-section input[type="number"] {
       width: 100%;
       padding: 7px 10px;
@@ -255,12 +256,30 @@
     </div>
     <div id="panel-body">
       <div class="config-section">
+        <label for="inp-title">Titre</label>
+        <input type="text" id="inp-title" placeholder="Titre du graphique" />
+      </div>
+      <div class="config-section">
+        <label for="inp-subtitle">Sous-titre</label>
+        <input type="text" id="inp-subtitle" placeholder="Sous-titre (optionnel)" />
+      </div>
+      <div class="config-section">
         <label for="sel-x">Axe X (numérique)</label>
         <select id="sel-x"><option value="">— choisir —</option></select>
       </div>
       <div class="config-section">
         <label for="sel-y">Axe Y (numérique)</label>
         <select id="sel-y"><option value="">— choisir —</option></select>
+      </div>
+      <div class="config-row">
+        <div class="config-section">
+          <label for="inp-xlabel">Nom axe X</label>
+          <input type="text" id="inp-xlabel" placeholder="Nom de l'axe X" />
+        </div>
+        <div class="config-section">
+          <label for="inp-ylabel">Nom axe Y</label>
+          <input type="text" id="inp-ylabel" placeholder="Nom de l'axe Y" />
+        </div>
       </div>
       <div class="config-section">
         <label for="sel-color">Couleur par (catégorie, optionnel)</label>
@@ -295,8 +314,12 @@
 let allRecords = [];
 let allColumns = [];
 let config = {
+  title: '',
+  subtitle: '',
   colX: '',
   colY: '',
+  xLabel: '',
+  yLabel: '',
   colColor: '',
   colLabel: '',
   radius: 5,
@@ -352,9 +375,13 @@ function populateSelects() {
     if (prev && allCols.includes(prev)) sel.value = prev;
   });
 
-  // Apply current config to selects
+  // Apply current config to selects and inputs
+  document.getElementById('inp-title').value = config.title || '';
+  document.getElementById('inp-subtitle').value = config.subtitle || '';
   if (config.colX) document.getElementById('sel-x').value = config.colX;
   if (config.colY) document.getElementById('sel-y').value = config.colY;
+  document.getElementById('inp-xlabel').value = config.xLabel || '';
+  document.getElementById('inp-ylabel').value = config.yLabel || '';
   if (config.colColor) document.getElementById('sel-color').value = config.colColor;
   if (config.colLabel) document.getElementById('sel-label').value = config.colLabel;
   document.getElementById('inp-radius').value = config.radius;
@@ -399,9 +426,12 @@ function render() {
     return;
   }
 
-  // Update subtitle
-  document.getElementById('topbar-sub').textContent =
-    `${data.length} point${data.length > 1 ? 's' : ''} — X: ${config.colX} / Y: ${config.colY}`;
+  // Update title & subtitle
+  document.getElementById('titre').textContent = config.title || 'Scatterplot';
+  const subParts = [];
+  if (config.subtitle) subParts.push(config.subtitle);
+  subParts.push(`${data.length} point${data.length > 1 ? 's' : ''}`);
+  document.getElementById('topbar-sub').textContent = subParts.join(' — ');
 
   // Dimensions
   const rect = container.getBoundingClientRect();
@@ -469,7 +499,7 @@ function render() {
     .attr('text-anchor', 'middle')
     .attr('x', margin.left + innerW / 2)
     .attr('y', height - 6)
-    .text(config.colX);
+    .text(config.xLabel || config.colX);
 
   svg.append('text')
     .attr('class', 'axis-label')
@@ -477,7 +507,7 @@ function render() {
     .attr('transform', `rotate(-90)`)
     .attr('x', -(margin.top + innerH / 2))
     .attr('y', 16)
-    .text(config.colY);
+    .text(config.yLabel || config.colY);
 
   // Tooltip
   const tooltip = document.getElementById('tooltip');
@@ -535,8 +565,12 @@ function closePanel() {
 }
 
 async function saveConfig() {
+  config.title = document.getElementById('inp-title').value.trim();
+  config.subtitle = document.getElementById('inp-subtitle').value.trim();
   config.colX = document.getElementById('sel-x').value;
   config.colY = document.getElementById('sel-y').value;
+  config.xLabel = document.getElementById('inp-xlabel').value.trim();
+  config.yLabel = document.getElementById('inp-ylabel').value.trim();
   config.colColor = document.getElementById('sel-color').value;
   config.colLabel = document.getElementById('sel-label').value;
   config.radius = parseFloat(document.getElementById('inp-radius').value) || 5;
