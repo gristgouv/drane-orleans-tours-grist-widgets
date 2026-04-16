@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scatterplot D3.js</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --r:       10px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Topbar ── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+    }
+    #topbar h2 { font-size: 0.9rem; color: var(--text); }
+    #topbar-sub { font-size: 0.75rem; color: var(--muted); }
+
+    .btn-icon {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; padding: 6px 8px; border-radius: 6px;
+      color: #4a5568; transition: background 0.15s; line-height: 1;
+    }
+    .btn-icon:hover { background: #edf2f7; }
+
+    /* ── Chart area ── */
+    #chart-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      min-height: 0;
+    }
+
+    #chart-container svg {
+      background: var(--surface);
+      border-radius: var(--r);
+      border: 1px solid var(--border);
+    }
+
+    .dot {
+      stroke: #fff;
+      stroke-width: 1;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .dot:hover { stroke-width: 2; }
+
+    .axis-label {
+      font-size: 12px;
+      fill: var(--muted);
+      font-weight: 600;
+    }
+
+    .grid line {
+      stroke: #e2e6ed;
+      stroke-dasharray: 2,2;
+    }
+    .grid .domain { display: none; }
+
+    /* ── Tooltip ── */
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      line-height: 1.5;
+      max-width: 260px;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    #tooltip.visible { opacity: 1; }
+
+    /* ── Message vide ── */
+    #empty-msg {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 40px;
+    }
+
+    /* ── Légende ── */
+    #legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 6px 14px 10px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Overlay / Config panel ── */
+    #overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: flex-end;
+    }
+    #overlay.open { display: flex; }
+    #panel {
+      width: 340px;
+      height: 100%;
+      background: white;
+      overflow-y: auto;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+    }
+    #panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; top: 0; z-index: 5;
+    }
+    #panel-header h3 { font-size: 0.95rem; }
+    #btn-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; color: #4a5568; padding: 4px 8px; border-radius: 4px;
+    }
+    #btn-close:hover { background: #edf2f7; }
+    #panel-body { padding: 16px; flex: 1; }
+
+    .config-section {
+      margin-bottom: 18px;
+    }
+    .config-section label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 6px;
+    }
+    .config-section select,
+    .config-section input[type="number"] {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+    }
+    .config-section select:focus,
+    .config-section input:focus { border-color: var(--accent); }
+
+    .config-row {
+      display: flex;
+      gap: 10px;
+    }
+    .config-row .config-section { flex: 1; }
+
+    #panel-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; bottom: 0;
+    }
+    #btn-save {
+      width: 100%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 9px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #btn-save:hover { background: #1d4ed8; }
+    #save-msg {
+      font-size: 0.8rem;
+      color: #276749;
+      text-align: center;
+      min-height: 16px;
+      margin-top: 6px;
+      font-weight: 600;
+    }
+    #save-msg.error { color: #c53030; }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <div>
+    <h2 id="titre">Scatterplot</h2>
+    <span id="topbar-sub"></span>
+  </div>
+  <button id="btn-config" class="btn-icon" title="Configuration">&#9881;</button>
+</div>
+
+<div id="legend"></div>
+<div id="chart-container">
+  <p id="empty-msg">Chargement des données...</p>
+</div>
+<div id="tooltip"></div>
+
+<!-- Config panel -->
+<div id="overlay">
+  <div id="panel">
+    <div id="panel-header">
+      <h3>Configuration</h3>
+      <button id="btn-close">&#10005;</button>
+    </div>
+    <div id="panel-body">
+      <div class="config-section">
+        <label for="sel-x">Axe X (numérique)</label>
+        <select id="sel-x"><option value="">— choisir —</option></select>
+      </div>
+      <div class="config-section">
+        <label for="sel-y">Axe Y (numérique)</label>
+        <select id="sel-y"><option value="">— choisir —</option></select>
+      </div>
+      <div class="config-section">
+        <label for="sel-color">Couleur par (catégorie, optionnel)</label>
+        <select id="sel-color"><option value="">— aucune —</option></select>
+      </div>
+      <div class="config-section">
+        <label for="sel-label">Label (affiché au survol, optionnel)</label>
+        <select id="sel-label"><option value="">— aucun —</option></select>
+      </div>
+      <div class="config-row">
+        <div class="config-section">
+          <label for="inp-radius">Rayon des points</label>
+          <input type="number" id="inp-radius" min="1" max="30" value="5" />
+        </div>
+        <div class="config-section">
+          <label for="inp-opacity">Opacité (0-1)</label>
+          <input type="number" id="inp-opacity" min="0.1" max="1" step="0.1" value="0.7" />
+        </div>
+      </div>
+    </div>
+    <div id="panel-footer">
+      <button id="btn-save">Enregistrer</button>
+      <p id="save-msg"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let allRecords = [];
+let allColumns = [];
+let config = {
+  colX: '',
+  colY: '',
+  colColor: '',
+  colLabel: '',
+  radius: 5,
+  opacity: 0.7,
+};
+
+const COLORS = d3.schemeTableau10;
+const margin = { top: 20, right: 20, bottom: 50, left: 60 };
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function numericColumns(records) {
+  if (!records.length) return [];
+  const sample = records[0];
+  return Object.keys(sample).filter(k => {
+    if (k === 'id' || k === 'manualSort') return false;
+    return records.some(r => typeof r[k] === 'number' && isFinite(r[k]));
+  });
+}
+
+function allColumnNames(records) {
+  if (!records.length) return [];
+  return Object.keys(records[0]).filter(k => k !== 'id' && k !== 'manualSort');
+}
+
+function populateSelects() {
+  const numCols = numericColumns(allRecords);
+  const allCols = allColumnNames(allRecords);
+
+  [document.getElementById('sel-x'), document.getElementById('sel-y')].forEach(sel => {
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">— choisir —</option>';
+    numCols.forEach(col => {
+      const opt = document.createElement('option');
+      opt.value = col;
+      opt.textContent = col;
+      sel.appendChild(opt);
+    });
+    if (prev && numCols.includes(prev)) sel.value = prev;
+  });
+
+  [document.getElementById('sel-color'), document.getElementById('sel-label')].forEach(sel => {
+    const prev = sel.value;
+    const placeholder = sel.id === 'sel-color' ? '— aucune —' : '— aucun —';
+    sel.innerHTML = `<option value="">${placeholder}</option>`;
+    allCols.forEach(col => {
+      const opt = document.createElement('option');
+      opt.value = col;
+      opt.textContent = col;
+      sel.appendChild(opt);
+    });
+    if (prev && allCols.includes(prev)) sel.value = prev;
+  });
+
+  // Apply current config to selects
+  if (config.colX) document.getElementById('sel-x').value = config.colX;
+  if (config.colY) document.getElementById('sel-y').value = config.colY;
+  if (config.colColor) document.getElementById('sel-color').value = config.colColor;
+  if (config.colLabel) document.getElementById('sel-label').value = config.colLabel;
+  document.getElementById('inp-radius').value = config.radius;
+  document.getElementById('inp-opacity').value = config.opacity;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CHART RENDERING
+// ═══════════════════════════════════════════════════════════════
+function render() {
+  const container = document.getElementById('chart-container');
+  const emptyMsg = document.getElementById('empty-msg');
+  const legendEl = document.getElementById('legend');
+
+  // Clear
+  container.querySelectorAll('svg').forEach(s => s.remove());
+  legendEl.innerHTML = '';
+
+  if (!config.colX || !config.colY || allRecords.length === 0) {
+    emptyMsg.textContent = !allRecords.length
+      ? 'Chargement des données...'
+      : 'Configurez les axes X et Y pour afficher le graphique.';
+    emptyMsg.style.display = '';
+    return;
+  }
+  emptyMsg.style.display = 'none';
+
+  // Filter valid data
+  const data = allRecords
+    .map(r => ({
+      x: parseFloat(r[config.colX]),
+      y: parseFloat(r[config.colY]),
+      color: config.colColor ? String(r[config.colColor] ?? '') : '',
+      label: config.colLabel ? String(r[config.colLabel] ?? '') : '',
+      raw: r,
+    }))
+    .filter(d => isFinite(d.x) && isFinite(d.y));
+
+  if (data.length === 0) {
+    emptyMsg.textContent = 'Aucune donnée numérique valide pour les axes sélectionnés.';
+    emptyMsg.style.display = '';
+    return;
+  }
+
+  // Update subtitle
+  document.getElementById('topbar-sub').textContent =
+    `${data.length} point${data.length > 1 ? 's' : ''} — X: ${config.colX} / Y: ${config.colY}`;
+
+  // Dimensions
+  const rect = container.getBoundingClientRect();
+  const width = Math.max(300, rect.width - 24);
+  const height = Math.max(250, rect.height - 12);
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  // Scales
+  const xExtent = d3.extent(data, d => d.x);
+  const yExtent = d3.extent(data, d => d.y);
+  const xPad = (xExtent[1] - xExtent[0]) * 0.05 || 1;
+  const yPad = (yExtent[1] - yExtent[0]) * 0.05 || 1;
+
+  const xScale = d3.scaleLinear()
+    .domain([xExtent[0] - xPad, xExtent[1] + xPad])
+    .range([0, innerW]);
+
+  const yScale = d3.scaleLinear()
+    .domain([yExtent[0] - yPad, yExtent[1] + yPad])
+    .range([innerH, 0]);
+
+  // Color scale
+  const categories = config.colColor
+    ? [...new Set(data.map(d => d.color))].sort()
+    : [''];
+  const colorScale = d3.scaleOrdinal()
+    .domain(categories)
+    .range(COLORS);
+
+  // SVG
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height);
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Grid
+  g.append('g')
+    .attr('class', 'grid')
+    .attr('transform', `translate(0,${innerH})`)
+    .call(d3.axisBottom(xScale).tickSize(-innerH).tickFormat(''));
+
+  g.append('g')
+    .attr('class', 'grid')
+    .call(d3.axisLeft(yScale).tickSize(-innerW).tickFormat(''));
+
+  // Axes
+  g.append('g')
+    .attr('transform', `translate(0,${innerH})`)
+    .call(d3.axisBottom(xScale).ticks(Math.min(10, innerW / 60)))
+    .selectAll('text')
+    .style('font-size', '11px');
+
+  g.append('g')
+    .call(d3.axisLeft(yScale).ticks(Math.min(10, innerH / 40)))
+    .selectAll('text')
+    .style('font-size', '11px');
+
+  // Axis labels
+  svg.append('text')
+    .attr('class', 'axis-label')
+    .attr('text-anchor', 'middle')
+    .attr('x', margin.left + innerW / 2)
+    .attr('y', height - 6)
+    .text(config.colX);
+
+  svg.append('text')
+    .attr('class', 'axis-label')
+    .attr('text-anchor', 'middle')
+    .attr('transform', `rotate(-90)`)
+    .attr('x', -(margin.top + innerH / 2))
+    .attr('y', 16)
+    .text(config.colY);
+
+  // Tooltip
+  const tooltip = document.getElementById('tooltip');
+
+  // Dots
+  g.selectAll('.dot')
+    .data(data)
+    .join('circle')
+    .attr('class', 'dot')
+    .attr('cx', d => xScale(d.x))
+    .attr('cy', d => yScale(d.y))
+    .attr('r', config.radius)
+    .attr('fill', d => colorScale(d.color))
+    .attr('opacity', config.opacity)
+    .on('mouseover', function (event, d) {
+      d3.select(this).attr('opacity', 1).attr('r', config.radius + 2);
+      let html = '';
+      if (d.label) html += `<strong>${d.label}</strong><br>`;
+      html += `${config.colX}: <strong>${d.x}</strong><br>`;
+      html += `${config.colY}: <strong>${d.y}</strong>`;
+      if (config.colColor && d.color) html += `<br>${config.colColor}: ${d.color}`;
+      tooltip.innerHTML = html;
+      tooltip.classList.add('visible');
+    })
+    .on('mousemove', function (event) {
+      tooltip.style.left = (event.clientX + 12) + 'px';
+      tooltip.style.top = (event.clientY - 10) + 'px';
+    })
+    .on('mouseout', function () {
+      d3.select(this).attr('opacity', config.opacity).attr('r', config.radius);
+      tooltip.classList.remove('visible');
+    });
+
+  // Legend
+  if (config.colColor && categories.length > 1) {
+    categories.forEach(cat => {
+      const item = document.createElement('span');
+      item.className = 'legend-item';
+      item.innerHTML = `<span class="legend-dot" style="background:${colorScale(cat)}"></span>${cat || '(vide)'}`;
+      legendEl.appendChild(item);
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIG PANEL
+// ═══════════════════════════════════════════════════════════════
+function openPanel() {
+  populateSelects();
+  document.getElementById('overlay').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('overlay').classList.remove('open');
+}
+
+async function saveConfig() {
+  config.colX = document.getElementById('sel-x').value;
+  config.colY = document.getElementById('sel-y').value;
+  config.colColor = document.getElementById('sel-color').value;
+  config.colLabel = document.getElementById('sel-label').value;
+  config.radius = parseFloat(document.getElementById('inp-radius').value) || 5;
+  config.opacity = parseFloat(document.getElementById('inp-opacity').value) || 0.7;
+
+  const msgEl = document.getElementById('save-msg');
+  try {
+    await grist.setOption('scatterConfig', JSON.stringify(config));
+    msgEl.className = '';
+    msgEl.textContent = 'Sauvegardé !';
+    render();
+    setTimeout(() => { msgEl.textContent = ''; closePanel(); }, 800);
+  } catch (e) {
+    msgEl.className = 'error';
+    msgEl.textContent = 'Erreur : ' + e.message;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('btn-config').addEventListener('click', openPanel);
+document.getElementById('btn-close').addEventListener('click', closePanel);
+document.getElementById('btn-save').addEventListener('click', saveConfig);
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closePanel();
+});
+document.getElementById('overlay').addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePanel();
+});
+
+// Resize
+window.addEventListener('resize', () => {
+  if (config.colX && config.colY) render();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GRIST API
+// ═══════════════════════════════════════════════════════════════
+grist.ready({ requiredAccess: 'read table' });
+
+grist.onOptions(options => {
+  if (options && options.scatterConfig) {
+    try {
+      const saved = JSON.parse(options.scatterConfig);
+      Object.assign(config, saved);
+    } catch (e) {}
+  }
+  render();
+});
+
+grist.onRecords(records => {
+  if (!records || records.length === 0) return;
+  allRecords = records;
+  allColumns = Object.keys(records[0]);
+  render();
+});
+</script>
+</body>
+</html>
