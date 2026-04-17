@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Donut D3.js</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --r:       10px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Topbar ── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+    }
+    #topbar h2 { font-size: 0.9rem; color: var(--text); }
+    #topbar-sub { font-size: 0.75rem; color: var(--muted); }
+
+    .btn-icon {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; padding: 6px 8px; border-radius: 6px;
+      color: #4a5568; transition: background 0.15s; line-height: 1;
+    }
+    .btn-icon:hover { background: #edf2f7; }
+
+    /* ── Chart area ── */
+    #chart-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      min-height: 0;
+    }
+
+    #chart-container svg {
+      background: var(--surface);
+      border-radius: var(--r);
+      border: 1px solid var(--border);
+    }
+
+    .arc {
+      stroke: #fff;
+      stroke-width: 2;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .arc-label {
+      font-size: 11px;
+      fill: #fff;
+      font-weight: 600;
+      pointer-events: none;
+      text-anchor: middle;
+    }
+
+    .center-label {
+      text-anchor: middle;
+      fill: var(--text);
+    }
+    .center-value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .center-sub {
+      font-size: 11px;
+      fill: var(--muted);
+    }
+
+    /* ── Tooltip ── */
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      line-height: 1.5;
+      max-width: 260px;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    #tooltip.visible { opacity: 1; }
+
+    /* ── Message vide ── */
+    #empty-msg {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 40px;
+    }
+
+    /* ── Légende ── */
+    #legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 6px 14px 10px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      justify-content: center;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Overlay / Config panel ── */
+    #overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: flex-end;
+    }
+    #overlay.open { display: flex; }
+    #panel {
+      width: 340px;
+      height: 100%;
+      background: white;
+      overflow-y: auto;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+    }
+    #panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; top: 0; z-index: 5;
+    }
+    #panel-header h3 { font-size: 0.95rem; }
+    #btn-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; color: #4a5568; padding: 4px 8px; border-radius: 4px;
+    }
+    #btn-close:hover { background: #edf2f7; }
+    #panel-body { padding: 16px; flex: 1; }
+
+    .config-section {
+      margin-bottom: 18px;
+    }
+    .config-section label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 6px;
+    }
+    .config-section select,
+    .config-section input[type="text"],
+    .config-section input[type="number"] {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+    }
+    .config-section select:focus,
+    .config-section input:focus { border-color: var(--accent); }
+
+    .config-row {
+      display: flex;
+      gap: 10px;
+    }
+    .config-row .config-section { flex: 1; }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+    }
+    .checkbox-row input { cursor: pointer; }
+    .checkbox-row label {
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--text);
+      font-weight: 500;
+      margin-bottom: 0;
+    }
+
+    #panel-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; bottom: 0;
+    }
+    #btn-save {
+      width: 100%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 9px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #btn-save:hover { background: #1d4ed8; }
+    #save-msg {
+      font-size: 0.8rem;
+      color: #276749;
+      text-align: center;
+      min-height: 16px;
+      margin-top: 6px;
+      font-weight: 600;
+    }
+    #save-msg.error { color: #c53030; }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <div>
+    <h2 id="titre">Donut</h2>
+    <span id="topbar-sub"></span>
+  </div>
+  <button id="btn-config" class="btn-icon" title="Configuration">&#9881;</button>
+</div>
+
+<div id="legend"></div>
+<div id="chart-container">
+  <p id="empty-msg">Chargement des données...</p>
+</div>
+<div id="tooltip"></div>
+
+<!-- Config panel -->
+<div id="overlay">
+  <div id="panel">
+    <div id="panel-header">
+      <h3>Configuration</h3>
+      <button id="btn-close">&#10005;</button>
+    </div>
+    <div id="panel-body">
+      <div class="config-section">
+        <label for="inp-title">Titre</label>
+        <input type="text" id="inp-title" placeholder="Titre du graphique" />
+      </div>
+      <div class="config-section">
+        <label for="inp-subtitle">Sous-titre</label>
+        <input type="text" id="inp-subtitle" placeholder="Sous-titre (optionnel)" />
+      </div>
+      <div class="config-section">
+        <label for="sel-category">Colonne catégorie</label>
+        <select id="sel-category"><option value="">— choisir —</option></select>
+      </div>
+      <div class="config-section">
+        <label for="sel-value">Colonne valeur (numérique, optionnel)</label>
+        <select id="sel-value"><option value="">— compter les lignes —</option></select>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-showlabels" checked />
+        <label for="inp-showlabels">Afficher les valeurs sur les arcs</label>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-showpct" checked />
+        <label for="inp-showpct">Afficher les pourcentages dans le tooltip</label>
+      </div>
+      <div class="config-row">
+        <div class="config-section">
+          <label for="inp-inner">Rayon intérieur (%)</label>
+          <input type="number" id="inp-inner" min="0" max="90" value="55" />
+        </div>
+        <div class="config-section">
+          <label for="inp-pad">Espace entre arcs</label>
+          <input type="number" id="inp-pad" min="0" max="10" step="0.5" value="1" />
+        </div>
+      </div>
+    </div>
+    <div id="panel-footer">
+      <button id="btn-save">Enregistrer</button>
+      <p id="save-msg"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let allRecords = [];
+let config = {
+  title: '',
+  subtitle: '',
+  colCategory: '',
+  colValue: '',
+  showLabels: true,
+  showPct: true,
+  innerPct: 55,
+  padAngle: 1,
+};
+
+const COLORS = d3.schemeTableau10.concat(d3.schemeSet3);
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function allColumnNames(records) {
+  if (!records.length) return [];
+  return Object.keys(records[0]).filter(k => k !== 'id' && k !== 'manualSort');
+}
+
+function numericColumns(records) {
+  if (!records.length) return [];
+  return Object.keys(records[0]).filter(k => {
+    if (k === 'id' || k === 'manualSort') return false;
+    return records.some(r => typeof r[k] === 'number' && isFinite(r[k]));
+  });
+}
+
+function populateSelects() {
+  const allCols = allColumnNames(allRecords);
+  const numCols = numericColumns(allRecords);
+
+  const selCat = document.getElementById('sel-category');
+  const prevCat = selCat.value;
+  selCat.innerHTML = '<option value="">— choisir —</option>';
+  allCols.forEach(col => {
+    const opt = document.createElement('option');
+    opt.value = col;
+    opt.textContent = col;
+    selCat.appendChild(opt);
+  });
+  if (prevCat && allCols.includes(prevCat)) selCat.value = prevCat;
+
+  const selVal = document.getElementById('sel-value');
+  const prevVal = selVal.value;
+  selVal.innerHTML = '<option value="">— compter les lignes —</option>';
+  numCols.forEach(col => {
+    const opt = document.createElement('option');
+    opt.value = col;
+    opt.textContent = col;
+    selVal.appendChild(opt);
+  });
+  if (prevVal && numCols.includes(prevVal)) selVal.value = prevVal;
+
+  // Apply current config
+  document.getElementById('inp-title').value = config.title || '';
+  document.getElementById('inp-subtitle').value = config.subtitle || '';
+  if (config.colCategory) selCat.value = config.colCategory;
+  if (config.colValue) selVal.value = config.colValue;
+  document.getElementById('inp-showlabels').checked = config.showLabels;
+  document.getElementById('inp-showpct').checked = config.showPct;
+  document.getElementById('inp-inner').value = config.innerPct;
+  document.getElementById('inp-pad').value = config.padAngle;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AGGREGATE
+// ═══════════════════════════════════════════════════════════════
+function aggregate() {
+  const map = new Map();
+  for (const r of allRecords) {
+    const key = String(r[config.colCategory] ?? '');
+    if (!key) continue;
+    let v = 1;
+    if (config.colValue) {
+      const num = parseFloat(r[config.colValue]);
+      if (!isFinite(num)) continue;
+      v = num;
+    }
+    map.set(key, (map.get(key) || 0) + v);
+  }
+  return Array.from(map.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CHART RENDERING
+// ═══════════════════════════════════════════════════════════════
+function render() {
+  const container = document.getElementById('chart-container');
+  const emptyMsg = document.getElementById('empty-msg');
+  const legendEl = document.getElementById('legend');
+
+  container.querySelectorAll('svg').forEach(s => s.remove());
+  legendEl.innerHTML = '';
+
+  if (!config.colCategory || allRecords.length === 0) {
+    emptyMsg.textContent = !allRecords.length
+      ? 'Chargement des données...'
+      : 'Choisissez une colonne de catégorie pour afficher le donut.';
+    emptyMsg.style.display = '';
+    return;
+  }
+
+  const data = aggregate();
+
+  if (data.length === 0) {
+    emptyMsg.textContent = 'Aucune donnée valide pour la configuration choisie.';
+    emptyMsg.style.display = '';
+    return;
+  }
+
+  emptyMsg.style.display = 'none';
+
+  // Title & subtitle
+  document.getElementById('titre').textContent = config.title || 'Donut';
+  const total = data.reduce((s, d) => s + d.value, 0);
+  const subParts = [];
+  if (config.subtitle) subParts.push(config.subtitle);
+  subParts.push(`${data.length} catégorie${data.length > 1 ? 's' : ''}`);
+  subParts.push(`total : ${total.toLocaleString('fr-FR')}`);
+  document.getElementById('topbar-sub').textContent = subParts.join(' — ');
+
+  // Dimensions
+  const rect = container.getBoundingClientRect();
+  const width = Math.max(300, rect.width - 24);
+  const height = Math.max(250, rect.height - 12);
+  const radius = Math.min(width, height) / 2 - 20;
+  const innerRadius = radius * (config.innerPct / 100);
+
+  // Color scale
+  const colorScale = d3.scaleOrdinal()
+    .domain(data.map(d => d.label))
+    .range(COLORS);
+
+  // SVG
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height);
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${width/2},${height/2})`);
+
+  // Pie layout
+  const pie = d3.pie()
+    .value(d => d.value)
+    .sort(null)
+    .padAngle(config.padAngle * Math.PI / 180);
+
+  const arc = d3.arc()
+    .innerRadius(innerRadius)
+    .outerRadius(radius)
+    .cornerRadius(2);
+
+  const arcHover = d3.arc()
+    .innerRadius(innerRadius)
+    .outerRadius(radius + 6)
+    .cornerRadius(2);
+
+  const arcs = pie(data);
+
+  // Tooltip
+  const tooltip = document.getElementById('tooltip');
+
+  // Paths
+  g.selectAll('.arc')
+    .data(arcs)
+    .join('path')
+    .attr('class', 'arc')
+    .attr('d', arc)
+    .attr('fill', d => colorScale(d.data.label))
+    .on('mouseover', function (event, d) {
+      d3.select(this).transition().duration(120).attr('d', arcHover);
+      const pct = (d.data.value / total * 100).toFixed(1);
+      let html = `<strong>${d.data.label}</strong><br>`;
+      html += `${config.colValue || 'Nombre'} : <strong>${d.data.value.toLocaleString('fr-FR')}</strong>`;
+      if (config.showPct) html += `<br>Part : <strong>${pct} %</strong>`;
+      tooltip.innerHTML = html;
+      tooltip.classList.add('visible');
+    })
+    .on('mousemove', function (event) {
+      tooltip.style.left = (event.clientX + 12) + 'px';
+      tooltip.style.top = (event.clientY - 10) + 'px';
+    })
+    .on('mouseout', function () {
+      d3.select(this).transition().duration(120).attr('d', arc);
+      tooltip.classList.remove('visible');
+    });
+
+  // Arc labels (only if slice is big enough)
+  if (config.showLabels) {
+    g.selectAll('.arc-label')
+      .data(arcs)
+      .join('text')
+      .attr('class', 'arc-label')
+      .attr('transform', d => `translate(${arc.centroid(d)})`)
+      .attr('dy', '0.35em')
+      .text(d => {
+        const pct = d.data.value / total;
+        if (pct < 0.04) return '';
+        return d.data.value.toLocaleString('fr-FR');
+      });
+  }
+
+  // Center label (total)
+  g.append('text')
+    .attr('class', 'center-label center-value')
+    .attr('dy', '-0.1em')
+    .text(total.toLocaleString('fr-FR'));
+
+  g.append('text')
+    .attr('class', 'center-label center-sub')
+    .attr('dy', '1.3em')
+    .text('Total');
+
+  // Legend
+  data.forEach(d => {
+    const item = document.createElement('span');
+    item.className = 'legend-item';
+    const pct = (d.value / total * 100).toFixed(1);
+    item.innerHTML = `<span class="legend-dot" style="background:${colorScale(d.label)}"></span>${d.label} (${pct} %)`;
+    legendEl.appendChild(item);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIG PANEL
+// ═══════════════════════════════════════════════════════════════
+function openPanel() {
+  populateSelects();
+  document.getElementById('overlay').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('overlay').classList.remove('open');
+}
+
+async function saveConfig() {
+  config.title = document.getElementById('inp-title').value.trim();
+  config.subtitle = document.getElementById('inp-subtitle').value.trim();
+  config.colCategory = document.getElementById('sel-category').value;
+  config.colValue = document.getElementById('sel-value').value;
+  config.showLabels = document.getElementById('inp-showlabels').checked;
+  config.showPct = document.getElementById('inp-showpct').checked;
+  config.innerPct = parseFloat(document.getElementById('inp-inner').value) || 55;
+  config.padAngle = parseFloat(document.getElementById('inp-pad').value) || 0;
+
+  const msgEl = document.getElementById('save-msg');
+  try {
+    await grist.setOption('donutConfig', JSON.stringify(config));
+    msgEl.className = '';
+    msgEl.textContent = 'Sauvegardé !';
+    render();
+    setTimeout(() => { msgEl.textContent = ''; closePanel(); }, 800);
+  } catch (e) {
+    msgEl.className = 'error';
+    msgEl.textContent = 'Erreur : ' + e.message;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('btn-config').addEventListener('click', openPanel);
+document.getElementById('btn-close').addEventListener('click', closePanel);
+document.getElementById('btn-save').addEventListener('click', saveConfig);
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closePanel();
+});
+document.getElementById('overlay').addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePanel();
+});
+
+window.addEventListener('resize', () => {
+  if (config.colCategory) render();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GRIST API
+// ═══════════════════════════════════════════════════════════════
+grist.ready({ requiredAccess: 'read table' });
+
+grist.onOptions(options => {
+  if (options && options.donutConfig) {
+    try {
+      const saved = JSON.parse(options.donutConfig);
+      Object.assign(config, saved);
+    } catch (e) {}
+  }
+  render();
+});
+
+grist.onRecords(records => {
+  if (!records || records.length === 0) return;
+  allRecords = records;
+  render();
+});
+</script>
+</body>
+</html>
