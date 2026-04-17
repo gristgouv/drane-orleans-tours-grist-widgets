@@ -202,6 +202,75 @@
     }
     .config-row .config-section { flex: 1; }
 
+    .colors-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      background: var(--bg);
+    }
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 4px;
+      font-size: 0.8rem;
+      border-radius: 3px;
+    }
+    .color-row:hover { background: var(--surface); }
+    .color-row input[type="color"] {
+      width: 32px;
+      height: 26px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px;
+      cursor: pointer;
+      background: var(--surface);
+    }
+    .color-row .color-label {
+      flex: 1;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .color-row button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .color-row button:hover { background: #fee; color: #c53030; }
+    .colors-empty {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-style: italic;
+      padding: 6px;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+    }
+    .checkbox-row input { cursor: pointer; }
+    .checkbox-row label {
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--text);
+      font-weight: 500;
+      margin-bottom: 0;
+    }
+
     #panel-footer {
       padding: 12px 16px;
       border-top: 1px solid var(--border);
@@ -286,6 +355,20 @@
         <select id="sel-color"><option value="">— aucune —</option></select>
       </div>
       <div class="config-section">
+        <label for="sel-palette">Palette de couleurs</label>
+        <select id="sel-palette"></select>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-useshapes" />
+        <label for="inp-useshapes">Formes par catégorie (daltoniens)</label>
+      </div>
+      <div class="config-section">
+        <label>Couleurs personnalisées</label>
+        <div id="colors-list" class="colors-list">
+          <span class="colors-empty">Sélectionnez une colonne catégorie pour personnaliser les couleurs.</span>
+        </div>
+      </div>
+      <div class="config-section">
         <label for="sel-label">Label (affiché au survol, optionnel)</label>
         <select id="sel-label"><option value="">— aucun —</option></select>
       </div>
@@ -324,10 +407,47 @@ let config = {
   colLabel: '',
   radius: 5,
   opacity: 0.7,
+  palette: 'Tableau10',
+  colorOverrides: {},   // { categoryLabel: '#rrggbb' }
+  useShapes: false,     // formes différentes par catégorie (accessibilité daltoniens)
 };
 
-const COLORS = d3.schemeTableau10;
+// Palettes standards + palettes adaptées aux daltoniens (Okabe-Ito, Tol, Dark2)
+const PALETTES = {
+  // Standards
+  'Tableau10':  d3.schemeTableau10,
+  'Category10': d3.schemeCategory10,
+  'Set1':       d3.schemeSet1,
+  'Set2':       d3.schemeSet2,
+  'Set3':       d3.schemeSet3,
+  'Paired':     d3.schemePaired,
+  'Pastel1':    d3.schemePastel1,
+  'Pastel2':    d3.schemePastel2,
+  'Accent':     d3.schemeAccent,
+  // Accessibles (daltoniens)
+  'Okabe-Ito':  ['#E69F00','#56B4E9','#009E73','#F0E442','#0072B2','#D55E00','#CC79A7','#000000'],
+  'Tol Bright': ['#4477AA','#EE6677','#228833','#CCBB44','#66CCEE','#AA3377','#BBBBBB'],
+  'Tol Muted':  ['#CC6677','#332288','#DDCC77','#117733','#88CCEE','#882255','#44AA99','#999933','#AA4499','#DDDDDD'],
+  'Tol Light':  ['#77AADD','#EE8866','#EEDD88','#FFAABB','#99DDFF','#44BB99','#BBCC33','#AAAA00','#DDDDDD'],
+  'Dark2':      d3.schemeDark2,
+};
+const CB_SAFE = new Set(['Okabe-Ito','Tol Bright','Tol Muted','Tol Light','Dark2']);
+
+// Symboles D3 utilisés quand "Formes par catégorie" est activé
+const SYMBOLS = [
+  d3.symbolCircle, d3.symbolSquare, d3.symbolTriangle, d3.symbolDiamond,
+  d3.symbolCross,  d3.symbolStar,   d3.symbolWye,
+];
 const margin = { top: 20, right: 20, bottom: 50, left: 60 };
+
+function getPaletteColors() {
+  return PALETTES[config.palette] || PALETTES['Tableau10'];
+}
+
+function getCurrentCategories() {
+  if (!config.colColor || allRecords.length === 0) return [''];
+  return [...new Set(allRecords.map(r => String(r[config.colColor] ?? '')))].sort();
+}
 
 // ═══════════════════════════════════════════════════════════════
 // HELPERS
@@ -375,6 +495,26 @@ function populateSelects() {
     if (prev && allCols.includes(prev)) sel.value = prev;
   });
 
+  // Palette (groupées standards / daltoniens)
+  const selPal = document.getElementById('sel-palette');
+  selPal.innerHTML = '';
+  const grpStd = document.createElement('optgroup');
+  grpStd.label = 'Standard';
+  const grpCb  = document.createElement('optgroup');
+  grpCb.label  = 'Accessible (daltoniens)';
+  Object.keys(PALETTES).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    (CB_SAFE.has(name) ? grpCb : grpStd).appendChild(opt);
+  });
+  selPal.appendChild(grpStd);
+  selPal.appendChild(grpCb);
+  selPal.value = config.palette;
+
+  // Formes par catégorie (daltoniens)
+  document.getElementById('inp-useshapes').checked = !!config.useShapes;
+
   // Apply current config to selects and inputs
   document.getElementById('inp-title').value = config.title || '';
   document.getElementById('inp-subtitle').value = config.subtitle || '';
@@ -386,6 +526,60 @@ function populateSelects() {
   if (config.colLabel) document.getElementById('sel-label').value = config.colLabel;
   document.getElementById('inp-radius').value = config.radius;
   document.getElementById('inp-opacity').value = config.opacity;
+
+  refreshColorsList();
+}
+
+function refreshColorsList() {
+  const list = document.getElementById('colors-list');
+  const colCategory = document.getElementById('sel-color').value;
+  const paletteName = document.getElementById('sel-palette').value || config.palette;
+  const colors = PALETTES[paletteName] || PALETTES['Tableau10'];
+  list.innerHTML = '';
+
+  const categories = colCategory
+    ? [...new Set(allRecords.map(r => String(r[colCategory] ?? '')))].sort()
+    : [];
+
+  if (!colCategory) {
+    // Pas de colonne catégorie → une couleur unique (1er élément de la palette)
+    const cur = config.colorOverrides['__single__'] || colors[0];
+    list.innerHTML = `
+      <div class="color-row">
+        <input type="color" data-cat="__single__" value="${cur}">
+        <span class="color-label">Tous les points</span>
+        <button type="button" data-reset="__single__">Défaut</button>
+      </div>`;
+  } else if (categories.length === 0) {
+    list.innerHTML = '<span class="colors-empty">Aucune donnée disponible pour cette colonne.</span>';
+  } else {
+    categories.forEach((cat, i) => {
+      const cur = config.colorOverrides[cat] || colors[i % colors.length];
+      const row = document.createElement('div');
+      row.className = 'color-row';
+      row.innerHTML = `
+        <input type="color" data-cat="${encodeURIComponent(cat)}" value="${cur}">
+        <span class="color-label" title="${cat}">${cat || '(vide)'}</span>
+        <button type="button" data-reset="${encodeURIComponent(cat)}">Défaut</button>
+      `;
+      list.appendChild(row);
+    });
+  }
+
+  // Handlers
+  list.querySelectorAll('input[type="color"]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const cat = decodeURIComponent(inp.dataset.cat);
+      config.colorOverrides[cat] = inp.value;
+    });
+  });
+  list.querySelectorAll('button[data-reset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = decodeURIComponent(btn.dataset.reset);
+      delete config.colorOverrides[cat];
+      refreshColorsList();
+    });
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -458,9 +652,13 @@ function render() {
   const categories = config.colColor
     ? [...new Set(data.map(d => d.color))].sort()
     : [''];
-  const colorScale = d3.scaleOrdinal()
-    .domain(categories)
-    .range(COLORS);
+  const paletteColors = getPaletteColors();
+  const colorFor = (cat) => {
+    if (!config.colColor) return config.colorOverrides['__single__'] || paletteColors[0];
+    if (config.colorOverrides[cat]) return config.colorOverrides[cat];
+    const idx = categories.indexOf(cat);
+    return paletteColors[(idx >= 0 ? idx : 0) % paletteColors.length];
+  };
 
   // SVG
   const svg = d3.select(container)
@@ -512,18 +710,30 @@ function render() {
   // Tooltip
   const tooltip = document.getElementById('tooltip');
 
-  // Dots
+  // Dots (path + d3.symbol pour permettre des formes différentes par catégorie)
+  // Aire du symbole ≈ π·r² pour conserver une taille équivalente à un cercle
+  const baseArea  = Math.PI * config.radius * config.radius;
+  const hoverArea = Math.PI * (config.radius + 2) * (config.radius + 2);
+  const symbolFor = (cat) => {
+    if (!config.useShapes || !config.colColor) return d3.symbolCircle;
+    const idx = categories.indexOf(cat);
+    return SYMBOLS[(idx >= 0 ? idx : 0) % SYMBOLS.length];
+  };
+  const baseSymbol  = d3.symbol().size(baseArea);
+  const hoverSymbol = d3.symbol().size(hoverArea);
+
   g.selectAll('.dot')
     .data(data)
-    .join('circle')
+    .join('path')
     .attr('class', 'dot')
-    .attr('cx', d => xScale(d.x))
-    .attr('cy', d => yScale(d.y))
-    .attr('r', config.radius)
-    .attr('fill', d => colorScale(d.color))
+    .attr('transform', d => `translate(${xScale(d.x)},${yScale(d.y)})`)
+    .attr('d', d => baseSymbol.type(symbolFor(d.color))())
+    .attr('fill', d => colorFor(d.color))
     .attr('opacity', config.opacity)
     .on('mouseover', function (event, d) {
-      d3.select(this).attr('opacity', 1).attr('r', config.radius + 2);
+      d3.select(this)
+        .attr('opacity', 1)
+        .attr('d', hoverSymbol.type(symbolFor(d.color))());
       let html = '';
       if (d.label) html += `<strong>${d.label}</strong><br>`;
       html += `${config.colX}: <strong>${d.x}</strong><br>`;
@@ -536,17 +746,25 @@ function render() {
       tooltip.style.left = (event.clientX + 12) + 'px';
       tooltip.style.top = (event.clientY - 10) + 'px';
     })
-    .on('mouseout', function () {
-      d3.select(this).attr('opacity', config.opacity).attr('r', config.radius);
+    .on('mouseout', function (event, d) {
+      d3.select(this)
+        .attr('opacity', config.opacity)
+        .attr('d', baseSymbol.type(symbolFor(d.color))());
       tooltip.classList.remove('visible');
     });
 
-  // Legend
+  // Legend (avec forme si activé)
   if (config.colColor && categories.length > 1) {
+    const legendSymbol = d3.symbol().size(64);
     categories.forEach(cat => {
       const item = document.createElement('span');
       item.className = 'legend-item';
-      item.innerHTML = `<span class="legend-dot" style="background:${colorScale(cat)}"></span>${cat || '(vide)'}`;
+      if (config.useShapes) {
+        const path = legendSymbol.type(symbolFor(cat))();
+        item.innerHTML = `<svg width="14" height="14" viewBox="-8 -8 16 16" style="vertical-align:middle"><path d="${path}" fill="${colorFor(cat)}"/></svg> ${cat || '(vide)'}`;
+      } else {
+        item.innerHTML = `<span class="legend-dot" style="background:${colorFor(cat)}"></span>${cat || '(vide)'}`;
+      }
       legendEl.appendChild(item);
     });
   }
@@ -575,6 +793,9 @@ async function saveConfig() {
   config.colLabel = document.getElementById('sel-label').value;
   config.radius = parseFloat(document.getElementById('inp-radius').value) || 5;
   config.opacity = parseFloat(document.getElementById('inp-opacity').value) || 0.7;
+  config.palette = document.getElementById('sel-palette').value || 'Tableau10';
+  config.useShapes = document.getElementById('inp-useshapes').checked;
+  // colorOverrides est déjà mis à jour à la volée par refreshColorsList
 
   const msgEl = document.getElementById('save-msg');
   try {
@@ -595,6 +816,11 @@ async function saveConfig() {
 document.getElementById('btn-config').addEventListener('click', openPanel);
 document.getElementById('btn-close').addEventListener('click', closePanel);
 document.getElementById('btn-save').addEventListener('click', saveConfig);
+document.getElementById('sel-color').addEventListener('change', refreshColorsList);
+document.getElementById('sel-palette').addEventListener('change', e => {
+  config.palette = e.target.value;
+  refreshColorsList();
+});
 document.getElementById('overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('overlay')) closePanel();
 });
