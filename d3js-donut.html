@@ -226,6 +226,66 @@
       margin-bottom: 0;
     }
 
+    .mode-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--bg);
+      padding: 3px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .mode-tab {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-align: center;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-tab.active {
+      background: var(--surface);
+      color: var(--accent);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+
+    .cols-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2px;
+      max-height: 180px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      background: var(--bg);
+    }
+    .col-check {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 4px;
+      font-size: 0.8rem;
+      color: var(--text);
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .col-check:hover { background: var(--surface); }
+    .col-check input { cursor: pointer; }
+    .cols-empty {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-style: italic;
+      padding: 6px;
+    }
+
+    .mode-section { display: none; }
+    .mode-section.active { display: block; }
+
     #panel-footer {
       padding: 12px 16px;
       border-top: 1px solid var(--border);
@@ -288,12 +348,31 @@
         <input type="text" id="inp-subtitle" placeholder="Sous-titre (optionnel)" />
       </div>
       <div class="config-section">
-        <label for="sel-category">Colonne catégorie</label>
-        <select id="sel-category"><option value="">— choisir —</option></select>
+        <label>Mode d'agrégation</label>
+        <div class="mode-tabs" role="tablist">
+          <button type="button" class="mode-tab active" data-mode="rows">Par lignes</button>
+          <button type="button" class="mode-tab" data-mode="cols">Par colonnes (pivot)</button>
+        </div>
       </div>
-      <div class="config-section">
-        <label for="sel-value">Colonne valeur (numérique, optionnel)</label>
-        <select id="sel-value"><option value="">— compter les lignes —</option></select>
+
+      <div id="mode-rows" class="mode-section active">
+        <div class="config-section">
+          <label for="sel-category">Colonne catégorie</label>
+          <select id="sel-category"><option value="">— choisir —</option></select>
+        </div>
+        <div class="config-section">
+          <label for="sel-value">Colonne valeur (numérique, optionnel)</label>
+          <select id="sel-value"><option value="">— compter les lignes —</option></select>
+        </div>
+      </div>
+
+      <div id="mode-cols" class="mode-section">
+        <div class="config-section">
+          <label>Colonnes numériques à inclure</label>
+          <div id="cols-grid" class="cols-grid">
+            <span class="cols-empty">Chargement...</span>
+          </div>
+        </div>
       </div>
       <div class="config-section checkbox-row">
         <input type="checkbox" id="inp-showlabels" checked />
@@ -329,8 +408,10 @@ let allRecords = [];
 let config = {
   title: '',
   subtitle: '',
+  mode: 'rows',        // 'rows' ou 'cols'
   colCategory: '',
   colValue: '',
+  pivotCols: [],        // colonnes numériques utilisées en mode pivot
   showLabels: true,
   showPct: true,
   innerPct: 55,
@@ -381,6 +462,19 @@ function populateSelects() {
   });
   if (prevVal && numCols.includes(prevVal)) selVal.value = prevVal;
 
+  // Populate pivot columns grid
+  const grid = document.getElementById('cols-grid');
+  if (numCols.length === 0) {
+    grid.innerHTML = '<span class="cols-empty">Aucune colonne numérique disponible</span>';
+  } else {
+    grid.innerHTML = numCols.map(col => `
+      <label class="col-check">
+        <input type="checkbox" value="${col}" ${config.pivotCols.includes(col) ? 'checked' : ''}>
+        ${col}
+      </label>
+    `).join('');
+  }
+
   // Apply current config
   document.getElementById('inp-title').value = config.title || '';
   document.getElementById('inp-subtitle').value = config.subtitle || '';
@@ -390,12 +484,39 @@ function populateSelects() {
   document.getElementById('inp-showpct').checked = config.showPct;
   document.getElementById('inp-inner').value = config.innerPct;
   document.getElementById('inp-pad').value = config.padAngle;
+
+  // Apply mode
+  setActiveMode(config.mode || 'rows');
+}
+
+function setActiveMode(mode) {
+  document.querySelectorAll('.mode-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.mode === mode);
+  });
+  document.getElementById('mode-rows').classList.toggle('active', mode === 'rows');
+  document.getElementById('mode-cols').classList.toggle('active', mode === 'cols');
 }
 
 // ═══════════════════════════════════════════════════════════════
 // AGGREGATE
 // ═══════════════════════════════════════════════════════════════
 function aggregate() {
+  if (config.mode === 'cols') {
+    // Pivot : chaque colonne sélectionnée → un arc (somme sur toutes les lignes)
+    return config.pivotCols
+      .map(col => {
+        let total = 0;
+        for (const r of allRecords) {
+          const num = parseFloat(r[col]);
+          if (isFinite(num)) total += num;
+        }
+        return { label: col, value: total };
+      })
+      .filter(d => d.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }
+
+  // Mode 'rows' : agrégation classique par catégorie
   const map = new Map();
   for (const r of allRecords) {
     const key = String(r[config.colCategory] ?? '');
@@ -424,10 +545,17 @@ function render() {
   container.querySelectorAll('svg').forEach(s => s.remove());
   legendEl.innerHTML = '';
 
-  if (!config.colCategory || allRecords.length === 0) {
+  const isPivot = config.mode === 'cols';
+  const notConfigured = isPivot
+    ? !config.pivotCols || config.pivotCols.length === 0
+    : !config.colCategory;
+
+  if (notConfigured || allRecords.length === 0) {
     emptyMsg.textContent = !allRecords.length
       ? 'Chargement des données...'
-      : 'Choisissez une colonne de catégorie pour afficher le donut.';
+      : isPivot
+        ? 'Cochez au moins une colonne numérique à afficher.'
+        : 'Choisissez une colonne de catégorie pour afficher le donut.';
     emptyMsg.style.display = '';
     return;
   }
@@ -504,7 +632,8 @@ function render() {
       d3.select(this).transition().duration(120).attr('d', arcHover);
       const pct = (d.data.value / total * 100).toFixed(1);
       let html = `<strong>${d.data.label}</strong><br>`;
-      html += `${config.colValue || 'Nombre'} : <strong>${d.data.value.toLocaleString('fr-FR')}</strong>`;
+      const valueLabel = isPivot ? 'Valeur' : (config.colValue || 'Nombre');
+      html += `${valueLabel} : <strong>${d.data.value.toLocaleString('fr-FR')}</strong>`;
       if (config.showPct) html += `<br>Part : <strong>${pct} %</strong>`;
       tooltip.innerHTML = html;
       tooltip.classList.add('visible');
@@ -569,8 +698,13 @@ function closePanel() {
 async function saveConfig() {
   config.title = document.getElementById('inp-title').value.trim();
   config.subtitle = document.getElementById('inp-subtitle').value.trim();
+  const activeTab = document.querySelector('.mode-tab.active');
+  config.mode = activeTab ? activeTab.dataset.mode : 'rows';
   config.colCategory = document.getElementById('sel-category').value;
   config.colValue = document.getElementById('sel-value').value;
+  config.pivotCols = Array.from(
+    document.querySelectorAll('#cols-grid input[type="checkbox"]:checked')
+  ).map(cb => cb.value);
   config.showLabels = document.getElementById('inp-showlabels').checked;
   config.showPct = document.getElementById('inp-showpct').checked;
   config.innerPct = parseFloat(document.getElementById('inp-inner').value) || 55;
@@ -595,6 +729,9 @@ async function saveConfig() {
 document.getElementById('btn-config').addEventListener('click', openPanel);
 document.getElementById('btn-close').addEventListener('click', closePanel);
 document.getElementById('btn-save').addEventListener('click', saveConfig);
+document.querySelectorAll('.mode-tab').forEach(tab => {
+  tab.addEventListener('click', () => setActiveMode(tab.dataset.mode));
+});
 document.getElementById('overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('overlay')) closePanel();
 });
