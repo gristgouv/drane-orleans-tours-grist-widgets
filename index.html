@@ -2,12 +2,289 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>Depot des widget grist</title>
-  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dépôt des widgets Grist</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --good:    #16a34a;
+      --r:       10px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+      font-size: 14px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      margin-bottom: 24px;
+    }
+    header h1 {
+      font-size: 1.5rem;
+      margin-bottom: 6px;
+    }
+    header p {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border);
+    }
+
+    thead th {
+      background: #f7fafc;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #f9fafb; }
+
+    .widget-name {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .widget-file {
+      display: block;
+      font-family: 'Consolas', monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .widget-desc {
+      color: var(--text);
+      line-height: 1.5;
+      font-size: 0.88rem;
+    }
+
+    .link-cell {
+      white-space: nowrap;
+      width: 1%;
+    }
+    .link-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .link-url {
+      font-family: 'Consolas', monospace;
+      font-size: 0.75rem;
+      color: var(--accent);
+      background: var(--aclt);
+      padding: 4px 8px;
+      border-radius: 5px;
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .link-url:hover { text-decoration: underline; }
+
+    .btn {
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .btn.copied {
+      border-color: var(--good);
+      color: var(--good);
+      background: #f0fdf4;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 720px) {
+      .link-url { max-width: 140px; }
+      th, td { padding: 10px; }
+    }
+  </style>
 </head>
 <body>
-  ...
-  <!-- Le reste du contenu -->
-  ...
+<div class="container">
+  <header>
+    <h1>Dépôt des widgets Grist</h1>
+    <p>Liste des widgets personnalisés disponibles. Copiez l'URL et collez-la dans Grist (widget personnalisé → URL).</p>
+  </header>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Widget</th>
+          <th>Description</th>
+          <th>Lien</th>
+        </tr>
+      </thead>
+      <tbody id="widgets-body"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    <p id="base-url"></p>
+  </footer>
+</div>
+
+<script>
+const WIDGETS = [
+  {
+    name: 'Radar scores élève',
+    file: 'widget_radar.html',
+    desc: 'Graphiques radar (Chart.js) affichant les scores d\'un élève par catégorie (langage, maths, comportement, apprentissages). Catégories et colonnes entièrement configurables. Mode présentation plein écran via la page presenter.html.',
+  },
+  {
+    name: 'Équipement numérique – Écoles',
+    file: 'materiel_1D.html',
+    desc: 'Tableau de bord par école : indicateurs d\'équipement numérique (ordinateurs, tablettes, projection) comparés aux moyennes de circonscription et académiques.',
+  },
+  {
+    name: 'Comparaison Circonscriptions',
+    file: 'materiel_1D_graphique.html',
+    desc: 'Graphiques en barres (Chart.js) comparant les circonscriptions d\'un département sur l\'équipement numérique. Tri multi-critères, ligne de référence académique.',
+  },
+  {
+    name: 'Reconnect – Indicateurs',
+    file: 'reconnect.html',
+    desc: 'Widget d\'indicateurs Reconnect avec propagation des modifications à toutes les lignes d\'une même école (gestion des doublons).',
+  },
+  {
+    name: 'Reconnect – Carte',
+    file: 'reconnect_carte.html',
+    desc: 'Carte interactive Leaflet affichant les écoles Reconnect géolocalisées, colorées par niveau de priorité.',
+  },
+  {
+    name: 'Scatterplot D3.js',
+    file: 'd3js-scatterplot.html',
+    desc: 'Nuage de points (D3.js) configurable : choix des axes X/Y numériques, coloration par catégorie, titre/sous-titre et noms d\'axes personnalisables, tooltip au survol.',
+  },
+  {
+    name: 'Présentation radar',
+    file: 'presenter.html',
+    desc: 'Page compagnon du widget Radar : affichage plein écran des graphiques pour un élève (lancée depuis le bouton « Présentation » du widget radar). N\'est pas un widget Grist autonome.',
+  },
+];
+
+function makeUrl(file) {
+  const base = window.location.href.replace(/\/[^\/]*$/, '/');
+  return base + file;
+}
+
+function render() {
+  const tbody = document.getElementById('widgets-body');
+  tbody.innerHTML = '';
+
+  WIDGETS.forEach(w => {
+    const url = makeUrl(w.file);
+
+    const tr = document.createElement('tr');
+
+    const tdName = document.createElement('td');
+    tdName.innerHTML = `<span class="widget-name">${w.name}</span><span class="widget-file">${w.file}</span>`;
+
+    const tdDesc = document.createElement('td');
+    tdDesc.className = 'widget-desc';
+    tdDesc.textContent = w.desc;
+
+    const tdLink = document.createElement('td');
+    tdLink.className = 'link-cell';
+    tdLink.innerHTML = `
+      <div class="link-row">
+        <a class="link-url" href="${url}" target="_blank" title="${url}">${url}</a>
+        <button class="btn" type="button">Copier</button>
+      </div>
+    `;
+    const btn = tdLink.querySelector('button');
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(url);
+        btn.textContent = 'Copié !';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copier';
+          btn.classList.remove('copied');
+        }, 1500);
+      } catch (e) {
+        // Fallback
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.textContent = 'Copié !';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copier';
+          btn.classList.remove('copied');
+        }, 1500);
+      }
+    });
+
+    tr.appendChild(tdName);
+    tr.appendChild(tdDesc);
+    tr.appendChild(tdLink);
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('base-url').textContent =
+    'Base : ' + window.location.href.replace(/\/[^\/]*$/, '/');
+}
+
+render();
+</script>
 </body>
 </html>
