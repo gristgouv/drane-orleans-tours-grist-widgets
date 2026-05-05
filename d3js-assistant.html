@@ -378,17 +378,9 @@
 
       <div id="result-hint-wrap"></div>
 
-      <div class="result-section">
-        <h4>Lien du widget (à coller dans Grist)</h4>
-        <div class="url-row">
-          <a class="url-box" id="result-url" href="#" target="_blank"></a>
-          <button class="btn btn-primary" id="btn-copy">Copier l'URL</button>
-        </div>
-      </div>
-
       <div class="actions">
+        <button class="btn btn-primary" id="btn-use">Utiliser ce widget</button>
         <button class="btn btn-secondary" id="btn-restart">Recommencer</button>
-        <a class="btn btn-secondary" id="btn-open" href="#" target="_blank">Ouvrir le widget</a>
       </div>
     </div>
   </div>
@@ -651,12 +643,8 @@ function showResult(widgetKey, mode) {
     hintWrap.appendChild(div);
   }
 
-  const url = makeUrl(w.file);
-  const urlEl = document.getElementById('result-url');
-  urlEl.textContent = url;
-  urlEl.href = url;
-  urlEl.title = url;
-  document.getElementById('btn-open').href = url;
+  // Mémorise l'URL cible pour le bouton « Utiliser ce widget »
+  document.getElementById('btn-use').dataset.url = makeUrl(w.file);
 
   showStep(3);
 }
@@ -676,32 +664,19 @@ document.getElementById('btn-back').addEventListener('click', () => showStep(1))
 document.getElementById('btn-restart').addEventListener('click', reset);
 document.getElementById('btn-restart-from-result').addEventListener('click', reset);
 
-document.getElementById('btn-copy').addEventListener('click', async () => {
-  const url = document.getElementById('result-url').textContent;
-  const btn = document.getElementById('btn-copy');
-  try {
-    await navigator.clipboard.writeText(url);
-  } catch (e) {
-    const ta = document.createElement('textarea');
-    ta.value = url;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-  }
-  btn.textContent = 'Copié !';
-  btn.classList.add('copied');
-  setTimeout(() => {
-    btn.textContent = "Copier l'URL";
-    btn.classList.remove('copied');
-  }, 1500);
+document.getElementById('btn-use').addEventListener('click', () => {
+  const url = document.getElementById('btn-use').dataset.url;
+  if (url) window.location.href = url;
 });
 
 // ═══════════════════════════════════════════════════════════════
 // GRIST API (le widget n'a pas besoin des données mais doit s'enregistrer)
 // ═══════════════════════════════════════════════════════════════
+// On demande "read table" dès l'assistant : ainsi, après navigation vers le
+// widget choisi (donut, bar, scatter), l'accès aux données est déjà accordé
+// et l'utilisateur n'a rien à reconfigurer dans Grist.
 if (typeof grist !== 'undefined') {
-  grist.ready();
+  grist.ready({ requiredAccess: 'read table' });
 }
 </script>
 </body>
