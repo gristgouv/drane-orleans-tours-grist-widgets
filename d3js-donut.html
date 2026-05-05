@@ -375,6 +375,7 @@
     <h2 id="titre">Donut</h2>
     <span id="topbar-sub"></span>
   </div>
+  <button id="btn-back-assistant" class="btn-icon" hidden title="Choisir une autre visualisation">&#8634;</button>
   <button id="btn-config" class="btn-icon" title="Configuration">&#9881;</button>
 </div>
 
@@ -1011,7 +1012,14 @@ window.addEventListener('resize', () => {
 // ═══════════════════════════════════════════════════════════════
 grist.ready({ requiredAccess: 'read table' });
 
+// Bouton « Choisir une autre visualisation » (visible si arrivé depuis l'assistant)
+document.getElementById('btn-back-assistant').addEventListener('click', async () => {
+  try { await grist.setOption('selectedWidget', ''); } catch (e) {}
+  window.location.href = 'd3js-assistant.html#wizard';
+});
+
 grist.onOptions(options => {
+  document.getElementById('btn-back-assistant').hidden = !(options && options.selectedWidget);
   if (options && options.donutConfig) {
     try {
       const saved = JSON.parse(options.donutConfig);
