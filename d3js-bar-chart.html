@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bar Chart D3.js</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --r:       10px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Topbar ── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+    }
+    #topbar h2 { font-size: 0.9rem; color: var(--text); }
+    #topbar-sub { font-size: 0.75rem; color: var(--muted); }
+
+    .btn-icon {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; padding: 6px 8px; border-radius: 6px;
+      color: #4a5568; transition: background 0.15s; line-height: 1;
+    }
+    .btn-icon:hover { background: #edf2f7; }
+
+    /* ── Chart area ── */
+    #chart-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      min-height: 0;
+    }
+
+    #chart-container svg {
+      background: var(--surface);
+      border-radius: var(--r);
+      border: 1px solid var(--border);
+    }
+
+    .bar {
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .bar:hover { opacity: 0.85; }
+
+    .axis-label {
+      font-size: 12px;
+      fill: var(--muted);
+      font-weight: 600;
+    }
+    .grid line {
+      stroke: #e2e6ed;
+      stroke-dasharray: 2,2;
+    }
+    .grid .domain { display: none; }
+    .value-label {
+      font-size: 10px;
+      fill: var(--text);
+      font-weight: 600;
+      pointer-events: none;
+    }
+
+    /* ── Tooltip ── */
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      line-height: 1.5;
+      max-width: 260px;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    #tooltip.visible { opacity: 1; }
+
+    /* ── Empty msg ── */
+    #empty-msg {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 40px;
+    }
+
+    /* ── Légende ── */
+    #legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 6px 14px 10px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      justify-content: center;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    /* ── Overlay / Config panel ── */
+    #overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: flex-end;
+    }
+    #overlay.open { display: flex; }
+    #panel {
+      width: 340px;
+      height: 100%;
+      background: white;
+      overflow-y: auto;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+    }
+    #panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; top: 0; z-index: 5;
+    }
+    #panel-header h3 { font-size: 0.95rem; }
+    #btn-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; color: #4a5568; padding: 4px 8px; border-radius: 4px;
+    }
+    #btn-close:hover { background: #edf2f7; }
+    #panel-body { padding: 16px; flex: 1; }
+
+    .config-section { margin-bottom: 18px; }
+    .config-section label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 6px;
+    }
+    .config-section select,
+    .config-section input[type="text"],
+    .config-section input[type="number"] {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+    }
+    .config-section select:focus,
+    .config-section input:focus { border-color: var(--accent); }
+
+    .config-row { display: flex; gap: 10px; }
+    .config-row .config-section { flex: 1; }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+    }
+    .checkbox-row input { cursor: pointer; }
+    .checkbox-row label {
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--text);
+      font-weight: 500;
+      margin-bottom: 0;
+    }
+
+    .mode-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--bg);
+      padding: 3px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .mode-tab {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-align: center;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-tab.active {
+      background: var(--surface);
+      color: var(--accent);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+
+    .cols-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2px;
+      max-height: 180px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      background: var(--bg);
+    }
+    .col-check {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 4px;
+      font-size: 0.8rem;
+      color: var(--text);
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .col-check:hover { background: var(--surface); }
+    .col-check input { cursor: pointer; }
+    .cols-empty {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-style: italic;
+      padding: 6px;
+    }
+
+    .mode-section { display: none; }
+    .mode-section.active { display: block; }
+
+    .colors-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      background: var(--bg);
+    }
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 4px;
+      font-size: 0.8rem;
+      border-radius: 3px;
+    }
+    .color-row:hover { background: var(--surface); }
+    .color-row input[type="color"] {
+      width: 32px;
+      height: 26px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px;
+      cursor: pointer;
+      background: var(--surface);
+    }
+    .color-row .color-label {
+      flex: 1;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .color-row button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .color-row button:hover { background: #fee; color: #c53030; }
+    .colors-empty {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-style: italic;
+      padding: 6px;
+    }
+
+    #panel-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; bottom: 0;
+    }
+    #btn-save {
+      width: 100%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 9px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #btn-save:hover { background: #1d4ed8; }
+    #save-msg {
+      font-size: 0.8rem;
+      color: #276749;
+      text-align: center;
+      min-height: 16px;
+      margin-top: 6px;
+      font-weight: 600;
+    }
+    #save-msg.error { color: #c53030; }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <div>
+    <h2 id="titre">Bar Chart</h2>
+    <span id="topbar-sub"></span>
+  </div>
+  <button id="btn-config" class="btn-icon" title="Configuration">&#9881;</button>
+</div>
+
+<div id="legend"></div>
+<div id="chart-container">
+  <p id="empty-msg">Chargement des données...</p>
+</div>
+<div id="tooltip"></div>
+
+<!-- Config panel -->
+<div id="overlay">
+  <div id="panel">
+    <div id="panel-header">
+      <h3>Configuration</h3>
+      <button id="btn-close">&#10005;</button>
+    </div>
+    <div id="panel-body">
+      <div class="config-section">
+        <label for="inp-title">Titre</label>
+        <input type="text" id="inp-title" placeholder="Titre du graphique" />
+      </div>
+      <div class="config-section">
+        <label for="inp-subtitle">Sous-titre</label>
+        <input type="text" id="inp-subtitle" placeholder="Sous-titre (optionnel)" />
+      </div>
+
+      <div class="config-section">
+        <label>Mode d'agrégation</label>
+        <div class="mode-tabs" role="tablist">
+          <button type="button" class="mode-tab active" data-mode="rows">Par lignes</button>
+          <button type="button" class="mode-tab" data-mode="cols">Par colonnes (pivot)</button>
+        </div>
+      </div>
+
+      <div id="mode-rows" class="mode-section active">
+        <div class="config-section">
+          <label for="sel-category">Colonne catégorie</label>
+          <select id="sel-category"><option value="">— choisir —</option></select>
+        </div>
+        <div class="config-section">
+          <label for="sel-value">Colonne valeur (numérique, optionnel)</label>
+          <select id="sel-value"><option value="">— compter les lignes —</option></select>
+        </div>
+      </div>
+
+      <div id="mode-cols" class="mode-section">
+        <div class="config-section">
+          <label>Colonnes numériques à inclure</label>
+          <div id="cols-grid" class="cols-grid">
+            <span class="cols-empty">Chargement...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-row">
+        <div class="config-section">
+          <label for="inp-xlabel">Nom axe X</label>
+          <input type="text" id="inp-xlabel" placeholder="(catégories)" />
+        </div>
+        <div class="config-section">
+          <label for="inp-ylabel">Nom axe Y</label>
+          <input type="text" id="inp-ylabel" placeholder="(valeurs)" />
+        </div>
+      </div>
+
+      <div class="config-row">
+        <div class="config-section">
+          <label for="sel-orientation">Orientation</label>
+          <select id="sel-orientation">
+            <option value="vertical">Vertical</option>
+            <option value="horizontal">Horizontal</option>
+          </select>
+        </div>
+        <div class="config-section">
+          <label for="sel-sort">Tri</label>
+          <select id="sel-sort">
+            <option value="default">Ordre des données</option>
+            <option value="value-desc">Valeur décroissante</option>
+            <option value="value-asc">Valeur croissante</option>
+            <option value="name-asc">Nom A→Z</option>
+            <option value="name-desc">Nom Z→A</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="config-section">
+        <label for="sel-palette">Palette de couleurs</label>
+        <select id="sel-palette"></select>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-multicolor" />
+        <label for="inp-multicolor">Une couleur par barre (sinon couleur unique)</label>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-usepatterns" />
+        <label for="inp-usepatterns">Motifs sur les barres (daltoniens)</label>
+      </div>
+      <div class="config-section">
+        <label>Couleurs personnalisées</label>
+        <div id="colors-list" class="colors-list">
+          <span class="colors-empty">Configurez d'abord les données pour personnaliser les couleurs.</span>
+        </div>
+      </div>
+
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-showvalues" checked />
+        <label for="inp-showvalues">Afficher les valeurs sur les barres</label>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-showgrid" checked />
+        <label for="inp-showgrid">Afficher la grille</label>
+      </div>
+      <div class="config-row">
+        <div class="config-section">
+          <label for="inp-padding">Espacement (0-1)</label>
+          <input type="number" id="inp-padding" min="0" max="0.9" step="0.05" value="0.2" />
+        </div>
+      </div>
+    </div>
+    <div id="panel-footer">
+      <button id="btn-save">Enregistrer</button>
+      <p id="save-msg"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let allRecords = [];
+let config = {
+  title: '',
+  subtitle: '',
+  mode: 'rows',         // 'rows' ou 'cols'
+  colCategory: '',
+  colValue: '',
+  pivotCols: [],
+  xLabel: '',
+  yLabel: '',
+  orientation: 'vertical', // 'vertical' ou 'horizontal'
+  sort: 'default',
+  palette: 'Tableau10',
+  multiColor: false,    // une couleur par barre, sinon couleur unique
+  usePatterns: false,
+  colorOverrides: {},   // { label: '#rrggbb' }
+  showValues: true,
+  showGrid: true,
+  padding: 0.2,
+};
+
+// Palettes standards + accessibles (daltoniens)
+const PALETTES = {
+  'Tableau10':  d3.schemeTableau10,
+  'Category10': d3.schemeCategory10,
+  'Set1':       d3.schemeSet1,
+  'Set2':       d3.schemeSet2,
+  'Set3':       d3.schemeSet3,
+  'Paired':     d3.schemePaired,
+  'Pastel1':    d3.schemePastel1,
+  'Pastel2':    d3.schemePastel2,
+  'Accent':     d3.schemeAccent,
+  'Okabe-Ito':  ['#E69F00','#56B4E9','#009E73','#F0E442','#0072B2','#D55E00','#CC79A7','#000000'],
+  'Tol Bright': ['#4477AA','#EE6677','#228833','#CCBB44','#66CCEE','#AA3377','#BBBBBB'],
+  'Tol Muted':  ['#CC6677','#332288','#DDCC77','#117733','#88CCEE','#882255','#44AA99','#999933','#AA4499','#DDDDDD'],
+  'Tol Light':  ['#77AADD','#EE8866','#EEDD88','#FFAABB','#99DDFF','#44BB99','#BBCC33','#AAAA00','#DDDDDD'],
+  'Dark2':      d3.schemeDark2,
+};
+const CB_SAFE = new Set(['Okabe-Ito','Tol Bright','Tol Muted','Tol Light','Dark2']);
+const PATTERNS = ['solid','diag','diag-rev','cross','dots','horiz','vert','grid'];
+
+function getPaletteColors() {
+  return PALETTES[config.palette] || PALETTES['Tableau10'];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function allColumnNames(records) {
+  if (!records.length) return [];
+  return Object.keys(records[0]).filter(k => k !== 'id' && k !== 'manualSort');
+}
+
+function numericColumns(records) {
+  if (!records.length) return [];
+  return Object.keys(records[0]).filter(k => {
+    if (k === 'id' || k === 'manualSort') return false;
+    return records.some(r => typeof r[k] === 'number' && isFinite(r[k]));
+  });
+}
+
+function populateSelects() {
+  const allCols = allColumnNames(allRecords);
+  const numCols = numericColumns(allRecords);
+
+  // Catégorie
+  const selCat = document.getElementById('sel-category');
+  const prevCat = selCat.value;
+  selCat.innerHTML = '<option value="">— choisir —</option>';
+  allCols.forEach(col => {
+    const opt = document.createElement('option');
+    opt.value = col;
+    opt.textContent = col;
+    selCat.appendChild(opt);
+  });
+  if (prevCat && allCols.includes(prevCat)) selCat.value = prevCat;
+
+  // Valeur
+  const selVal = document.getElementById('sel-value');
+  const prevVal = selVal.value;
+  selVal.innerHTML = '<option value="">— compter les lignes —</option>';
+  numCols.forEach(col => {
+    const opt = document.createElement('option');
+    opt.value = col;
+    opt.textContent = col;
+    selVal.appendChild(opt);
+  });
+  if (prevVal && numCols.includes(prevVal)) selVal.value = prevVal;
+
+  // Pivot cols
+  const grid = document.getElementById('cols-grid');
+  if (numCols.length === 0) {
+    grid.innerHTML = '<span class="cols-empty">Aucune colonne numérique disponible</span>';
+  } else {
+    grid.innerHTML = numCols.map(col => `
+      <label class="col-check">
+        <input type="checkbox" value="${col}" ${config.pivotCols.includes(col) ? 'checked' : ''}>
+        ${col}
+      </label>
+    `).join('');
+  }
+
+  // Palette (groupées)
+  const selPal = document.getElementById('sel-palette');
+  selPal.innerHTML = '';
+  const grpStd = document.createElement('optgroup');
+  grpStd.label = 'Standard';
+  const grpCb  = document.createElement('optgroup');
+  grpCb.label  = 'Accessible (daltoniens)';
+  Object.keys(PALETTES).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    (CB_SAFE.has(name) ? grpCb : grpStd).appendChild(opt);
+  });
+  selPal.appendChild(grpStd);
+  selPal.appendChild(grpCb);
+  selPal.value = config.palette;
+
+  // Inputs
+  document.getElementById('inp-title').value = config.title || '';
+  document.getElementById('inp-subtitle').value = config.subtitle || '';
+  document.getElementById('inp-xlabel').value = config.xLabel || '';
+  document.getElementById('inp-ylabel').value = config.yLabel || '';
+  if (config.colCategory) selCat.value = config.colCategory;
+  if (config.colValue) selVal.value = config.colValue;
+  document.getElementById('sel-orientation').value = config.orientation;
+  document.getElementById('sel-sort').value = config.sort;
+  document.getElementById('inp-multicolor').checked = !!config.multiColor;
+  document.getElementById('inp-usepatterns').checked = !!config.usePatterns;
+  document.getElementById('inp-showvalues').checked = !!config.showValues;
+  document.getElementById('inp-showgrid').checked = !!config.showGrid;
+  document.getElementById('inp-padding').value = config.padding;
+
+  setActiveMode(config.mode || 'rows');
+  refreshColorsList();
+}
+
+function setActiveMode(mode) {
+  document.querySelectorAll('.mode-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.mode === mode);
+  });
+  document.getElementById('mode-rows').classList.toggle('active', mode === 'rows');
+  document.getElementById('mode-cols').classList.toggle('active', mode === 'cols');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AGGREGATE
+// ═══════════════════════════════════════════════════════════════
+function aggregate() {
+  let data;
+  if (config.mode === 'cols') {
+    data = config.pivotCols.map(col => {
+      let total = 0;
+      for (const r of allRecords) {
+        const num = parseFloat(r[col]);
+        if (isFinite(num)) total += num;
+      }
+      return { label: col, value: total };
+    });
+  } else {
+    const map = new Map();
+    const order = [];
+    for (const r of allRecords) {
+      const key = String(r[config.colCategory] ?? '');
+      if (!key) continue;
+      let v = 1;
+      if (config.colValue) {
+        const num = parseFloat(r[config.colValue]);
+        if (!isFinite(num)) continue;
+        v = num;
+      }
+      if (!map.has(key)) order.push(key);
+      map.set(key, (map.get(key) || 0) + v);
+    }
+    data = order.map(k => ({ label: k, value: map.get(k) }));
+  }
+
+  // Tri
+  switch (config.sort) {
+    case 'value-desc': data.sort((a,b) => b.value - a.value); break;
+    case 'value-asc':  data.sort((a,b) => a.value - b.value); break;
+    case 'name-asc':   data.sort((a,b) => a.label.localeCompare(b.label, 'fr')); break;
+    case 'name-desc':  data.sort((a,b) => b.label.localeCompare(a.label, 'fr')); break;
+  }
+  return data;
+}
+
+function getPreviewCategories() {
+  const activeTab = document.querySelector('.mode-tab.active');
+  const mode = activeTab ? activeTab.dataset.mode : config.mode;
+  if (mode === 'cols') {
+    return Array.from(
+      document.querySelectorAll('#cols-grid input[type="checkbox"]:checked')
+    ).map(cb => cb.value);
+  }
+  const catCol = document.getElementById('sel-category').value;
+  if (!catCol || !allRecords.length) return [];
+  const valCol = document.getElementById('sel-value').value;
+  const set = new Set();
+  for (const r of allRecords) {
+    const key = String(r[catCol] ?? '');
+    if (!key) continue;
+    if (valCol) {
+      const n = parseFloat(r[valCol]);
+      if (!isFinite(n)) continue;
+    }
+    set.add(key);
+  }
+  return [...set].sort();
+}
+
+function refreshColorsList() {
+  const list = document.getElementById('colors-list');
+  const paletteName = document.getElementById('sel-palette').value || config.palette;
+  const colors = PALETTES[paletteName] || PALETTES['Tableau10'];
+  const multi = document.getElementById('inp-multicolor').checked;
+  list.innerHTML = '';
+
+  if (!multi) {
+    // Couleur unique (premier élément de la palette par défaut)
+    const cur = config.colorOverrides['__single__'] || colors[0];
+    list.innerHTML = `
+      <div class="color-row">
+        <input type="color" data-cat="__single__" value="${cur}">
+        <span class="color-label">Toutes les barres</span>
+        <button type="button" data-reset="__single__">Défaut</button>
+      </div>`;
+  } else {
+    const categories = getPreviewCategories();
+    if (categories.length === 0) {
+      list.innerHTML = '<span class="colors-empty">Configurez d\'abord les données pour personnaliser les couleurs.</span>';
+    } else {
+      categories.forEach((cat, i) => {
+        const cur = config.colorOverrides[cat] || colors[i % colors.length];
+        const row = document.createElement('div');
+        row.className = 'color-row';
+        row.innerHTML = `
+          <input type="color" data-cat="${encodeURIComponent(cat)}" value="${cur}">
+          <span class="color-label" title="${cat}">${cat || '(vide)'}</span>
+          <button type="button" data-reset="${encodeURIComponent(cat)}">Défaut</button>
+        `;
+        list.appendChild(row);
+      });
+    }
+  }
+
+  list.querySelectorAll('input[type="color"]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const cat = decodeURIComponent(inp.dataset.cat);
+      config.colorOverrides[cat] = inp.value;
+    });
+  });
+  list.querySelectorAll('button[data-reset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = decodeURIComponent(btn.dataset.reset);
+      delete config.colorOverrides[cat];
+      refreshColorsList();
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SVG PATTERNS (daltoniens)
+// ═══════════════════════════════════════════════════════════════
+function buildPattern(defs, id, fg, kind) {
+  const p = defs.append('pattern')
+    .attr('id', id)
+    .attr('patternUnits', 'userSpaceOnUse')
+    .attr('width', 8)
+    .attr('height', 8);
+  p.append('rect').attr('width', 8).attr('height', 8).attr('fill', fg);
+  const stroke = 'rgba(255,255,255,0.65)';
+  const sw = 1.6;
+  if (kind === 'diag') {
+    p.append('path').attr('d', 'M0,8 L8,0').attr('stroke', stroke).attr('stroke-width', sw);
+    p.append('path').attr('d', 'M-2,2 L2,-2').attr('stroke', stroke).attr('stroke-width', sw);
+    p.append('path').attr('d', 'M6,10 L10,6').attr('stroke', stroke).attr('stroke-width', sw);
+  } else if (kind === 'diag-rev') {
+    p.append('path').attr('d', 'M0,0 L8,8').attr('stroke', stroke).attr('stroke-width', sw);
+    p.append('path').attr('d', 'M-2,6 L2,10').attr('stroke', stroke).attr('stroke-width', sw);
+    p.append('path').attr('d', 'M6,-2 L10,2').attr('stroke', stroke).attr('stroke-width', sw);
+  } else if (kind === 'cross') {
+    p.append('path').attr('d', 'M0,0 L8,8 M0,8 L8,0').attr('stroke', stroke).attr('stroke-width', sw);
+  } else if (kind === 'dots') {
+    p.append('circle').attr('cx', 2).attr('cy', 2).attr('r', 1.3).attr('fill', stroke);
+    p.append('circle').attr('cx', 6).attr('cy', 6).attr('r', 1.3).attr('fill', stroke);
+  } else if (kind === 'horiz') {
+    p.append('path').attr('d', 'M0,4 L8,4').attr('stroke', stroke).attr('stroke-width', sw);
+  } else if (kind === 'vert') {
+    p.append('path').attr('d', 'M4,0 L4,8').attr('stroke', stroke).attr('stroke-width', sw);
+  } else if (kind === 'grid') {
+    p.append('path').attr('d', 'M0,4 L8,4 M4,0 L4,8').attr('stroke', stroke).attr('stroke-width', sw);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CHART RENDERING
+// ═══════════════════════════════════════════════════════════════
+function render() {
+  const container = document.getElementById('chart-container');
+  const emptyMsg = document.getElementById('empty-msg');
+  const legendEl = document.getElementById('legend');
+
+  container.querySelectorAll('svg').forEach(s => s.remove());
+  legendEl.innerHTML = '';
+
+  const isPivot = config.mode === 'cols';
+  const notConfigured = isPivot
+    ? !config.pivotCols || config.pivotCols.length === 0
+    : !config.colCategory;
+
+  if (notConfigured || allRecords.length === 0) {
+    emptyMsg.textContent = !allRecords.length
+      ? 'Chargement des données...'
+      : isPivot
+        ? 'Cochez au moins une colonne numérique à afficher.'
+        : 'Choisissez une colonne de catégorie pour afficher les barres.';
+    emptyMsg.style.display = '';
+    return;
+  }
+
+  const data = aggregate();
+  if (data.length === 0) {
+    emptyMsg.textContent = 'Aucune donnée valide pour la configuration choisie.';
+    emptyMsg.style.display = '';
+    return;
+  }
+  emptyMsg.style.display = 'none';
+
+  // Title & subtitle
+  document.getElementById('titre').textContent = config.title || 'Bar Chart';
+  const total = data.reduce((s, d) => s + d.value, 0);
+  const subParts = [];
+  if (config.subtitle) subParts.push(config.subtitle);
+  subParts.push(`${data.length} barre${data.length > 1 ? 's' : ''}`);
+  subParts.push(`total : ${total.toLocaleString('fr-FR')}`);
+  document.getElementById('topbar-sub').textContent = subParts.join(' — ');
+
+  // Dimensions
+  const rect = container.getBoundingClientRect();
+  const width = Math.max(300, rect.width - 24);
+  const height = Math.max(250, rect.height - 12);
+  const isHoriz = config.orientation === 'horizontal';
+
+  // Marges plus larges côté axe avec catégories
+  const margin = isHoriz
+    ? { top: 20, right: 30, bottom: 50, left: 110 }
+    : { top: 20, right: 20, bottom: 80, left: 60 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  // Couleurs
+  const paletteColors = getPaletteColors();
+  const labelList = data.map(d => d.label);
+  const colorFor = (label) => {
+    if (!config.multiColor) {
+      return config.colorOverrides['__single__'] || paletteColors[0];
+    }
+    if (config.colorOverrides[label]) return config.colorOverrides[label];
+    const idx = labelList.indexOf(label);
+    return paletteColors[(idx >= 0 ? idx : 0) % paletteColors.length];
+  };
+  const patternFor = (label) => {
+    if (!config.usePatterns) return null;
+    const idx = labelList.indexOf(label);
+    return PATTERNS[(idx >= 0 ? idx : 0) % PATTERNS.length];
+  };
+
+  // SVG + defs
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height);
+
+  const uid = 'bp-' + Math.random().toString(36).slice(2, 8);
+  if (config.usePatterns) {
+    const defs = svg.append('defs');
+    data.forEach(d => {
+      const pat = patternFor(d.label);
+      if (!pat || pat === 'solid') return;
+      buildPattern(defs, `${uid}-${pat}-${encodeURIComponent(d.label)}`, colorFor(d.label), pat);
+    });
+  }
+  const fillFor = (label) => {
+    const color = colorFor(label);
+    if (!config.usePatterns) return color;
+    const pat = patternFor(label);
+    if (pat === 'solid') return color;
+    return `url(#${uid}-${pat}-${encodeURIComponent(label)})`;
+  };
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Échelles
+  const valMin = Math.min(0, d3.min(data, d => d.value));
+  const valMax = Math.max(0, d3.max(data, d => d.value));
+
+  let xScale, yScale, axisCat, axisVal;
+  if (isHoriz) {
+    yScale = d3.scaleBand()
+      .domain(data.map(d => d.label))
+      .range([0, innerH])
+      .padding(config.padding);
+    xScale = d3.scaleLinear()
+      .domain([valMin, valMax]).nice()
+      .range([0, innerW]);
+    axisCat = d3.axisLeft(yScale);
+    axisVal = d3.axisBottom(xScale).ticks(Math.min(10, innerW / 80));
+  } else {
+    xScale = d3.scaleBand()
+      .domain(data.map(d => d.label))
+      .range([0, innerW])
+      .padding(config.padding);
+    yScale = d3.scaleLinear()
+      .domain([valMin, valMax]).nice()
+      .range([innerH, 0]);
+    axisCat = d3.axisBottom(xScale);
+    axisVal = d3.axisLeft(yScale).ticks(Math.min(10, innerH / 40));
+  }
+
+  // Grille
+  if (config.showGrid) {
+    if (isHoriz) {
+      g.append('g')
+        .attr('class', 'grid')
+        .attr('transform', `translate(0,${innerH})`)
+        .call(d3.axisBottom(xScale).tickSize(-innerH).tickFormat(''));
+    } else {
+      g.append('g')
+        .attr('class', 'grid')
+        .call(d3.axisLeft(yScale).tickSize(-innerW).tickFormat(''));
+    }
+  }
+
+  // Axes
+  if (isHoriz) {
+    g.append('g')
+      .attr('transform', `translate(0,${innerH})`)
+      .call(axisVal)
+      .selectAll('text').style('font-size', '11px');
+    g.append('g')
+      .call(axisCat)
+      .selectAll('text').style('font-size', '11px');
+  } else {
+    const catAxis = g.append('g')
+      .attr('transform', `translate(0,${innerH})`)
+      .call(axisCat);
+    catAxis.selectAll('text')
+      .style('font-size', '11px')
+      .attr('transform', 'rotate(-30)')
+      .attr('text-anchor', 'end')
+      .attr('dy', '0.6em')
+      .attr('dx', '-0.4em');
+    g.append('g')
+      .call(axisVal)
+      .selectAll('text').style('font-size', '11px');
+  }
+
+  // Étiquettes d'axes
+  const xLabelText = config.xLabel || (isPivot ? '' : config.colCategory);
+  const yLabelText = config.yLabel || (isPivot ? 'Valeur' : (config.colValue || 'Nombre'));
+
+  svg.append('text')
+    .attr('class', 'axis-label')
+    .attr('text-anchor', 'middle')
+    .attr('x', margin.left + innerW / 2)
+    .attr('y', height - 6)
+    .text(isHoriz ? yLabelText : xLabelText);
+
+  svg.append('text')
+    .attr('class', 'axis-label')
+    .attr('text-anchor', 'middle')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -(margin.top + innerH / 2))
+    .attr('y', 16)
+    .text(isHoriz ? xLabelText : yLabelText);
+
+  // Tooltip
+  const tooltip = document.getElementById('tooltip');
+
+  // Barres
+  const bars = g.selectAll('.bar')
+    .data(data)
+    .join('rect')
+    .attr('class', 'bar')
+    .attr('fill', d => fillFor(d.label))
+    .attr('stroke', d => config.usePatterns ? colorFor(d.label) : 'none')
+    .attr('stroke-width', config.usePatterns ? 1 : 0);
+
+  if (isHoriz) {
+    bars
+      .attr('y', d => yScale(d.label))
+      .attr('height', yScale.bandwidth())
+      .attr('x', d => d.value >= 0 ? xScale(0) : xScale(d.value))
+      .attr('width', d => Math.abs(xScale(d.value) - xScale(0)));
+  } else {
+    bars
+      .attr('x', d => xScale(d.label))
+      .attr('width', xScale.bandwidth())
+      .attr('y', d => d.value >= 0 ? yScale(d.value) : yScale(0))
+      .attr('height', d => Math.abs(yScale(d.value) - yScale(0)));
+  }
+
+  bars
+    .on('mouseover', function (event, d) {
+      const pct = total ? (d.value / total * 100).toFixed(1) : '0';
+      const valueLabel = isPivot ? 'Valeur' : (config.colValue || 'Nombre');
+      let html = `<strong>${d.label}</strong><br>`;
+      html += `${valueLabel} : <strong>${d.value.toLocaleString('fr-FR')}</strong>`;
+      html += `<br>Part : <strong>${pct} %</strong>`;
+      tooltip.innerHTML = html;
+      tooltip.classList.add('visible');
+    })
+    .on('mousemove', function (event) {
+      tooltip.style.left = (event.clientX + 12) + 'px';
+      tooltip.style.top = (event.clientY - 10) + 'px';
+    })
+    .on('mouseout', function () {
+      tooltip.classList.remove('visible');
+    });
+
+  // Étiquettes de valeur sur les barres
+  if (config.showValues) {
+    g.selectAll('.value-label')
+      .data(data)
+      .join('text')
+      .attr('class', 'value-label')
+      .text(d => d.value.toLocaleString('fr-FR'))
+      .attr('text-anchor', isHoriz ? 'start' : 'middle')
+      .attr('x', d => {
+        if (isHoriz) return xScale(Math.max(0, d.value)) + 4;
+        return xScale(d.label) + xScale.bandwidth() / 2;
+      })
+      .attr('y', d => {
+        if (isHoriz) return yScale(d.label) + yScale.bandwidth() / 2 + 3;
+        return d.value >= 0 ? yScale(d.value) - 4 : yScale(d.value) + 12;
+      });
+  }
+
+  // Légende (uniquement en mode multi-couleurs)
+  if (config.multiColor) {
+    data.forEach(d => {
+      const item = document.createElement('span');
+      item.className = 'legend-item';
+      if (config.usePatterns) {
+        const fill = fillFor(d.label);
+        item.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:middle"><rect x="1" y="1" width="12" height="12" rx="2" fill="${fill}" stroke="${colorFor(d.label)}" stroke-width="1"/></svg> ${d.label}`;
+      } else {
+        item.innerHTML = `<span class="legend-dot" style="background:${colorFor(d.label)}"></span>${d.label}`;
+      }
+      legendEl.appendChild(item);
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIG PANEL
+// ═══════════════════════════════════════════════════════════════
+function openPanel() {
+  populateSelects();
+  document.getElementById('overlay').classList.add('open');
+}
+function closePanel() {
+  document.getElementById('overlay').classList.remove('open');
+}
+
+async function saveConfig() {
+  config.title = document.getElementById('inp-title').value.trim();
+  config.subtitle = document.getElementById('inp-subtitle').value.trim();
+  const activeTab = document.querySelector('.mode-tab.active');
+  config.mode = activeTab ? activeTab.dataset.mode : 'rows';
+  config.colCategory = document.getElementById('sel-category').value;
+  config.colValue = document.getElementById('sel-value').value;
+  config.pivotCols = Array.from(
+    document.querySelectorAll('#cols-grid input[type="checkbox"]:checked')
+  ).map(cb => cb.value);
+  config.xLabel = document.getElementById('inp-xlabel').value.trim();
+  config.yLabel = document.getElementById('inp-ylabel').value.trim();
+  config.orientation = document.getElementById('sel-orientation').value;
+  config.sort = document.getElementById('sel-sort').value;
+  config.palette = document.getElementById('sel-palette').value || 'Tableau10';
+  config.multiColor = document.getElementById('inp-multicolor').checked;
+  config.usePatterns = document.getElementById('inp-usepatterns').checked;
+  config.showValues = document.getElementById('inp-showvalues').checked;
+  config.showGrid = document.getElementById('inp-showgrid').checked;
+  config.padding = parseFloat(document.getElementById('inp-padding').value);
+  if (!isFinite(config.padding) || config.padding < 0) config.padding = 0.2;
+
+  const msgEl = document.getElementById('save-msg');
+  try {
+    await grist.setOption('barChartConfig', JSON.stringify(config));
+    msgEl.className = '';
+    msgEl.textContent = 'Sauvegardé !';
+    render();
+    setTimeout(() => { msgEl.textContent = ''; closePanel(); }, 800);
+  } catch (e) {
+    msgEl.className = 'error';
+    msgEl.textContent = 'Erreur : ' + e.message;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('btn-config').addEventListener('click', openPanel);
+document.getElementById('btn-close').addEventListener('click', closePanel);
+document.getElementById('btn-save').addEventListener('click', saveConfig);
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closePanel();
+});
+document.getElementById('overlay').addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePanel();
+});
+
+document.querySelectorAll('.mode-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    setActiveMode(tab.dataset.mode);
+    refreshColorsList();
+  });
+});
+document.getElementById('sel-category').addEventListener('change', refreshColorsList);
+document.getElementById('sel-value').addEventListener('change', refreshColorsList);
+document.getElementById('cols-grid').addEventListener('change', refreshColorsList);
+document.getElementById('inp-multicolor').addEventListener('change', refreshColorsList);
+document.getElementById('sel-palette').addEventListener('change', e => {
+  config.palette = e.target.value;
+  refreshColorsList();
+});
+
+window.addEventListener('resize', () => {
+  if (config.colCategory || (config.mode === 'cols' && config.pivotCols.length)) render();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GRIST API
+// ═══════════════════════════════════════════════════════════════
+grist.ready({ requiredAccess: 'read table' });
+
+grist.onOptions(options => {
+  if (options && options.barChartConfig) {
+    try {
+      const saved = JSON.parse(options.barChartConfig);
+      Object.assign(config, saved);
+    } catch (e) {}
+  }
+  render();
+});
+
+grist.onRecords(records => {
+  if (!records || records.length === 0) return;
+  allRecords = records;
+  render();
+});
+</script>
+</body>
+</html>
