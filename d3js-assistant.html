@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Assistant Dataviz D3.js</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --good:    #16a34a;
+      --good-lt: #dcfce7;
+      --warn:    #d97706;
+      --warn-lt: #fef3c7;
+      --pink:    #ec4899;
+      --pink-lt: #fce7f3;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --r:       12px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px;
+      font-size: 14px;
+    }
+
+    .container {
+      max-width: 880px;
+      margin: 0 auto;
+    }
+
+    /* ── Progress ── */
+    .progress {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .progress-bar {
+      flex: 1;
+      height: 4px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.3s ease;
+    }
+
+    /* ── Step ── */
+    .step {
+      display: none;
+    }
+    .step.active {
+      display: block;
+      animation: slideIn 0.25s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .step-header {
+      margin-bottom: 18px;
+    }
+    .step-eyebrow {
+      font-size: 0.72rem;
+      color: var(--accent);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 4px;
+    }
+    .step-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .step-desc {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    /* ── Cards (options) ── */
+    .options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+    }
+    .option-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: var(--r);
+      padding: 18px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.18s;
+      font-family: inherit;
+      color: inherit;
+      width: 100%;
+    }
+    .option-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(37,99,235,0.12);
+    }
+    .option-card:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .option-illus {
+      width: 100%;
+      height: 100px;
+      background: var(--bg);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .option-illus svg {
+      max-width: 80%;
+      max-height: 80%;
+    }
+    .option-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .option-desc {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── Back button ── */
+    .btn-back {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      margin-bottom: 12px;
+      font-family: inherit;
+    }
+    .btn-back:hover { background: var(--surface); color: var(--text); }
+
+    /* ── Result ── */
+    .result-card {
+      background: var(--surface);
+      border: 2px solid var(--accent);
+      border-radius: var(--r);
+      padding: 24px;
+      margin-bottom: 14px;
+    }
+    .result-eyebrow {
+      font-size: 0.72rem;
+      color: var(--accent);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+    }
+    .result-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .result-illus {
+      width: 100%;
+      max-width: 360px;
+      height: 140px;
+      background: var(--bg);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 12px 0;
+    }
+    .result-desc {
+      color: var(--text);
+      line-height: 1.55;
+      margin-bottom: 14px;
+    }
+    .result-section {
+      margin-bottom: 14px;
+    }
+    .result-section h4 {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .result-section ul {
+      padding-left: 18px;
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: var(--text);
+    }
+    .result-section ul li { margin-bottom: 3px; }
+
+    .url-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .url-box {
+      flex: 1;
+      min-width: 220px;
+      font-family: 'Consolas', monospace;
+      font-size: 0.78rem;
+      color: var(--accent);
+      background: var(--aclt);
+      padding: 8px 12px;
+      border-radius: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .url-box:hover { text-decoration: underline; }
+    .btn {
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+      border: none;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-primary.copied { background: var(--good); }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1.5px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Hint highlight ── */
+    .hint {
+      background: var(--warn-lt);
+      border-left: 3px solid var(--warn);
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .hint strong { color: var(--warn); }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="progress">
+    <span id="progress-label">Étape 1 / 2</span>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:50%"></div></div>
+  </div>
+
+  <!-- ───── STEP 1 : objectif ───── -->
+  <div class="step active" id="step-1">
+    <div class="step-header">
+      <div class="step-eyebrow">Étape 1</div>
+      <h1 class="step-title">Que voulez-vous mettre en évidence ?</h1>
+      <p class="step-desc">Choisissez le type de message que votre graphique doit transmettre.</p>
+    </div>
+    <div class="options">
+      <button class="option-card" data-goal="compare">
+        <div class="option-illus">
+          <svg viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+            <rect x="8"  y="32" width="14" height="24" fill="#2563eb"/>
+            <rect x="28" y="20" width="14" height="36" fill="#3b82f6"/>
+            <rect x="48" y="10" width="14" height="46" fill="#60a5fa"/>
+            <rect x="68" y="26" width="14" height="30" fill="#93c5fd"/>
+            <line x1="4" y1="56" x2="92" y2="56" stroke="#94a3b8" stroke-width="1"/>
+          </svg>
+        </div>
+        <div class="option-title">Comparer des valeurs</div>
+        <div class="option-desc">Classer ou comparer plusieurs catégories. <em>Ex&nbsp;: nombre d'élèves par classe, ventes par produit.</em></div>
+      </button>
+
+      <button class="option-card" data-goal="parts">
+        <div class="option-illus">
+          <svg viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="30" r="22" fill="#ec4899"/>
+            <path d="M50,30 L50,8 A22,22 0 0,1 71,36 Z" fill="#f472b6"/>
+            <path d="M50,30 L71,36 A22,22 0 0,1 35,48 Z" fill="#fbcfe8"/>
+            <circle cx="50" cy="30" r="9" fill="#fff"/>
+          </svg>
+        </div>
+        <div class="option-title">Montrer une répartition</div>
+        <div class="option-desc">Voir comment un tout est découpé. <em>Ex&nbsp;: % filles/garçons, parts d'un budget.</em></div>
+      </button>
+
+      <button class="option-card" data-goal="relation">
+        <div class="option-illus">
+          <svg viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+            <line x1="10" y1="55" x2="92" y2="55" stroke="#94a3b8" stroke-width="1"/>
+            <line x1="10" y1="5"  x2="10" y2="55" stroke="#94a3b8" stroke-width="1"/>
+            <circle cx="20" cy="48" r="3" fill="#16a34a"/>
+            <circle cx="32" cy="40" r="3" fill="#16a34a"/>
+            <circle cx="38" cy="35" r="3" fill="#16a34a"/>
+            <circle cx="50" cy="30" r="3" fill="#16a34a"/>
+            <circle cx="58" cy="22" r="3" fill="#16a34a"/>
+            <circle cx="70" cy="18" r="3" fill="#16a34a"/>
+            <circle cx="80" cy="12" r="3" fill="#16a34a"/>
+            <circle cx="44" cy="44" r="3" fill="#16a34a"/>
+            <circle cx="62" cy="32" r="3" fill="#16a34a"/>
+          </svg>
+        </div>
+        <div class="option-title">Étudier une relation</div>
+        <div class="option-desc">Voir comment deux mesures évoluent ensemble. <em>Ex&nbsp;: taille vs poids, ancienneté vs salaire.</em></div>
+      </button>
+    </div>
+  </div>
+
+  <!-- ───── STEP 2 : structure des données ───── -->
+  <div class="step" id="step-2">
+    <button class="btn-back" id="btn-back">← Retour</button>
+    <div class="step-header">
+      <div class="step-eyebrow">Étape 2</div>
+      <h1 class="step-title" id="step-2-title">Comment sont organisées vos données ?</h1>
+      <p class="step-desc">Cela détermine le mode de configuration du widget.</p>
+    </div>
+    <div class="options" id="step-2-options"></div>
+  </div>
+
+  <!-- ───── STEP 3 : résultat ───── -->
+  <div class="step" id="step-3">
+    <button class="btn-back" id="btn-restart-from-result">← Refaire le parcours</button>
+    <div class="result-card">
+      <div class="result-eyebrow">Notre recommandation</div>
+      <h2 class="result-title" id="result-title"></h2>
+      <div class="result-illus" id="result-illus"></div>
+      <p class="result-desc" id="result-desc"></p>
+
+      <div class="result-section">
+        <h4>Quand l'utiliser</h4>
+        <ul id="result-when"></ul>
+      </div>
+
+      <div class="result-section" id="result-config-section">
+        <h4>Configuration recommandée</h4>
+        <ul id="result-config"></ul>
+      </div>
+
+      <div id="result-hint-wrap"></div>
+
+      <div class="result-section">
+        <h4>Lien du widget (à coller dans Grist)</h4>
+        <div class="url-row">
+          <a class="url-box" id="result-url" href="#" target="_blank"></a>
+          <button class="btn btn-primary" id="btn-copy">Copier l'URL</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-secondary" id="btn-restart">Recommencer</button>
+        <a class="btn btn-secondary" id="btn-open" href="#" target="_blank">Ouvrir le widget</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// DONNÉES DES WIDGETS
+// ═══════════════════════════════════════════════════════════════
+const WIDGETS = {
+  bar: {
+    file: 'd3js-bar-chart.html',
+    title: 'Bar Chart D3.js',
+    desc: "Le diagramme en barres compare facilement des valeurs entre catégories. La longueur de chaque barre rend les écarts immédiatement visibles, et l'œil humain est très précis pour comparer des longueurs alignées sur une même base.",
+    when: [
+      "Comparer des grandeurs entre plusieurs catégories",
+      "Classer / ordonner (top N, ranking)",
+      "Mettre en évidence des écarts à une moyenne",
+    ],
+    illus: `
+      <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="20"  y="55" width="22" height="40" fill="#2563eb"/>
+        <rect x="50"  y="35" width="22" height="60" fill="#3b82f6"/>
+        <rect x="80"  y="20" width="22" height="75" fill="#60a5fa"/>
+        <rect x="110" y="42" width="22" height="53" fill="#93c5fd"/>
+        <rect x="140" y="60" width="22" height="35" fill="#bfdbfe"/>
+        <line x1="10" y1="95" x2="180" y2="95" stroke="#94a3b8" stroke-width="1"/>
+      </svg>`,
+  },
+  donut: {
+    file: 'd3js-donut.html',
+    title: 'Donut D3.js',
+    desc: "Le donut (ou camembert) montre comment un tout se répartit en sous-ensembles. Chaque tranche représente une part du total, et le trou central laisse de la place pour afficher la valeur globale.",
+    when: [
+      "Visualiser des proportions d'un total (100 %)",
+      "Mettre en avant une part dominante",
+      "Quand le nombre de catégories est limité (3 à 7 idéal)",
+    ],
+    illus: `
+      <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+        <g transform="translate(100,50)">
+          <circle r="40" fill="#ec4899"/>
+          <path d="M0,0 L0,-40 A40,40 0 0,1 38,12 Z" fill="#f472b6"/>
+          <path d="M0,0 L38,12 A40,40 0 0,1 -23,33 Z" fill="#fbcfe8"/>
+          <path d="M0,0 L-23,33 A40,40 0 0,1 -40,0 Z" fill="#f9a8d4"/>
+          <circle r="18" fill="#fff"/>
+        </g>
+      </svg>`,
+  },
+  scatter: {
+    file: 'd3js-scatterplot.html',
+    title: 'Scatterplot D3.js',
+    desc: "Le nuage de points place chaque enregistrement selon deux mesures numériques. Il révèle des corrélations, des tendances, des regroupements ou des valeurs aberrantes que l'on ne verrait pas dans un tableau.",
+    when: [
+      "Étudier la corrélation entre deux variables numériques",
+      "Repérer des outliers (points isolés)",
+      "Identifier des regroupements (clusters)",
+    ],
+    illus: `
+      <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+        <line x1="20" y1="90" x2="190" y2="90" stroke="#94a3b8" stroke-width="1"/>
+        <line x1="20" y1="10" x2="20"  y2="90" stroke="#94a3b8" stroke-width="1"/>
+        <circle cx="35"  cy="80" r="3.5" fill="#16a34a"/>
+        <circle cx="55"  cy="68" r="3.5" fill="#16a34a"/>
+        <circle cx="65"  cy="60" r="3.5" fill="#16a34a"/>
+        <circle cx="80"  cy="50" r="3.5" fill="#16a34a"/>
+        <circle cx="95"  cy="42" r="3.5" fill="#16a34a"/>
+        <circle cx="110" cy="36" r="3.5" fill="#16a34a"/>
+        <circle cx="125" cy="28" r="3.5" fill="#16a34a"/>
+        <circle cx="140" cy="22" r="3.5" fill="#16a34a"/>
+        <circle cx="160" cy="18" r="3.5" fill="#16a34a"/>
+        <circle cx="75"  cy="74" r="3.5" fill="#16a34a"/>
+        <circle cx="105" cy="55" r="3.5" fill="#16a34a"/>
+        <circle cx="135" cy="40" r="3.5" fill="#16a34a"/>
+      </svg>`,
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// CHEMINS POSSIBLES (étape 2)
+// ═══════════════════════════════════════════════════════════════
+const FOLLOWUPS = {
+  compare: {
+    title: 'Comment sont organisées vos données ?',
+    options: [
+      {
+        key: 'rows',
+        title: 'Plusieurs lignes',
+        desc: "Une colonne contient les catégories (ex: classe), une autre la valeur (ex: nb élèves). Une ligne par catégorie ou plusieurs lignes à agréger.",
+        result: { widget: 'bar', mode: 'rows' },
+      },
+      {
+        key: 'cols',
+        title: 'Tableau de synthèse',
+        desc: "Une seule (ou peu de) ligne(s) avec plusieurs colonnes numériques (ex: nb_filles, nb_garcons, total). Chaque colonne devient une barre.",
+        result: { widget: 'bar', mode: 'cols' },
+      },
+    ],
+  },
+  parts: {
+    title: 'Comment sont organisées vos données ?',
+    options: [
+      {
+        key: 'rows',
+        title: 'Plusieurs lignes',
+        desc: "Une colonne catégorie + (optionnel) une colonne de poids/valeur. Le widget compte ou somme par catégorie.",
+        result: { widget: 'donut', mode: 'rows' },
+      },
+      {
+        key: 'cols',
+        title: 'Tableau de synthèse',
+        desc: "Une ligne avec plusieurs colonnes numériques (ex: filles, garcons). Chaque colonne devient une part du donut.",
+        result: { widget: 'donut', mode: 'cols' },
+      },
+    ],
+  },
+  relation: {
+    title: 'Voulez-vous distinguer des groupes par couleur ?',
+    options: [
+      {
+        key: 'no-group',
+        title: 'Non, juste 2 mesures',
+        desc: "Chaque ligne possède 2 valeurs numériques (X et Y). Tous les points sont de la même couleur.",
+        result: { widget: 'scatter', mode: 'simple' },
+      },
+      {
+        key: 'group',
+        title: 'Oui, par catégorie',
+        desc: "En plus des 2 mesures, une colonne distingue des groupes (ex: niveau, genre). Chaque groupe aura sa couleur ou sa forme.",
+        result: { widget: 'scatter', mode: 'grouped' },
+      },
+    ],
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURATION RECOMMANDÉE PAR CHEMIN
+// ═══════════════════════════════════════════════════════════════
+function getConfigHints(widget, mode) {
+  const hints = [];
+  if (widget === 'bar') {
+    if (mode === 'rows') {
+      hints.push("Mode d'agrégation : <strong>Par lignes</strong>");
+      hints.push("Choisissez la <strong>colonne catégorie</strong> et, si besoin, une <strong>colonne valeur</strong> (laissez vide pour compter les lignes).");
+    } else {
+      hints.push("Mode d'agrégation : <strong>Par colonnes (pivot)</strong>");
+      hints.push("Cochez les colonnes numériques à transformer en barres.");
+    }
+    hints.push("Activez <strong>« Une couleur par barre »</strong> si chaque catégorie doit ressortir.");
+    hints.push("Choisissez l'<strong>orientation horizontale</strong> si vous avez beaucoup de catégories ou des libellés longs.");
+  } else if (widget === 'donut') {
+    if (mode === 'rows') {
+      hints.push("Mode d'agrégation : <strong>Par lignes</strong>");
+      hints.push("Choisissez la <strong>colonne catégorie</strong> et, si besoin, une <strong>colonne valeur</strong>.");
+    } else {
+      hints.push("Mode d'agrégation : <strong>Par colonnes (pivot)</strong>");
+      hints.push("Cochez les colonnes numériques à inclure dans le donut.");
+    }
+    hints.push("Limitez à <strong>3-7 tranches</strong> pour rester lisible (regroupez les petites parts si besoin).");
+  } else if (widget === 'scatter') {
+    hints.push("Sélectionnez la <strong>colonne axe X</strong> et la <strong>colonne axe Y</strong> (toutes deux numériques).");
+    if (mode === 'grouped') {
+      hints.push("Renseignez la <strong>colonne « Couleur par »</strong> pour distinguer les groupes.");
+      hints.push("Cochez <strong>« Formes par catégorie »</strong> pour une accessibilité daltoniens accrue.");
+    } else {
+      hints.push("Laissez la <strong>colonne « Couleur par »</strong> vide.");
+    }
+    hints.push("Renseignez la <strong>colonne label</strong> pour identifier les points au survol.");
+  }
+  return hints;
+}
+
+function getSpecialHint(widget, mode) {
+  if (widget === 'donut' && mode === 'rows') {
+    return "Si plus de 7 catégories, le donut devient illisible. Préférez le <strong>Bar Chart</strong>.";
+  }
+  if (widget === 'bar' && mode === 'rows') {
+    return null;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATE & NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+const state = { goal: null, followup: null };
+
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+  const total = 2;
+  document.getElementById('progress-label').textContent =
+    n === 3 ? 'Résultat' : `Étape ${n} / ${total}`;
+  const pct = n === 3 ? 100 : (n / total) * 100;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function reset() {
+  state.goal = null;
+  state.followup = null;
+  showStep(1);
+}
+
+function buildStep2(goal) {
+  const cfg = FOLLOWUPS[goal];
+  document.getElementById('step-2-title').textContent = cfg.title;
+  const container = document.getElementById('step-2-options');
+  container.innerHTML = '';
+  cfg.options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'option-card';
+    btn.innerHTML = `
+      <div class="option-title">${opt.title}</div>
+      <div class="option-desc">${opt.desc}</div>
+    `;
+    btn.addEventListener('click', () => {
+      state.followup = opt.key;
+      showResult(opt.result.widget, opt.result.mode);
+    });
+    container.appendChild(btn);
+  });
+}
+
+function makeUrl(file) {
+  const base = window.location.href.replace(/\/[^\/]*$/, '/');
+  return base + file;
+}
+
+function showResult(widgetKey, mode) {
+  const w = WIDGETS[widgetKey];
+  if (!w) return;
+  document.getElementById('result-title').textContent = w.title;
+  document.getElementById('result-illus').innerHTML = w.illus;
+  document.getElementById('result-desc').textContent = w.desc;
+
+  const whenList = document.getElementById('result-when');
+  whenList.innerHTML = '';
+  w.when.forEach(item => {
+    const li = document.createElement('li');
+    li.textContent = item;
+    whenList.appendChild(li);
+  });
+
+  const configList = document.getElementById('result-config');
+  configList.innerHTML = '';
+  getConfigHints(widgetKey, mode).forEach(h => {
+    const li = document.createElement('li');
+    li.innerHTML = h;
+    configList.appendChild(li);
+  });
+
+  const hintWrap = document.getElementById('result-hint-wrap');
+  hintWrap.innerHTML = '';
+  const hint = getSpecialHint(widgetKey, mode);
+  if (hint) {
+    const div = document.createElement('div');
+    div.className = 'hint';
+    div.innerHTML = '<strong>Attention :</strong> ' + hint;
+    hintWrap.appendChild(div);
+  }
+
+  const url = makeUrl(w.file);
+  const urlEl = document.getElementById('result-url');
+  urlEl.textContent = url;
+  urlEl.href = url;
+  urlEl.title = url;
+  document.getElementById('btn-open').href = url;
+
+  showStep(3);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════
+document.querySelectorAll('#step-1 .option-card').forEach(card => {
+  card.addEventListener('click', () => {
+    state.goal = card.dataset.goal;
+    buildStep2(state.goal);
+    showStep(2);
+  });
+});
+
+document.getElementById('btn-back').addEventListener('click', () => showStep(1));
+document.getElementById('btn-restart').addEventListener('click', reset);
+document.getElementById('btn-restart-from-result').addEventListener('click', reset);
+
+document.getElementById('btn-copy').addEventListener('click', async () => {
+  const url = document.getElementById('result-url').textContent;
+  const btn = document.getElementById('btn-copy');
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  btn.textContent = 'Copié !';
+  btn.classList.add('copied');
+  setTimeout(() => {
+    btn.textContent = "Copier l'URL";
+    btn.classList.remove('copied');
+  }, 1500);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GRIST API (le widget n'a pas besoin des données mais doit s'enregistrer)
+// ═══════════════════════════════════════════════════════════════
+if (typeof grist !== 'undefined') {
+  grist.ready();
+}
+</script>
+</body>
+</html>
