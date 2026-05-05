@@ -643,8 +643,10 @@ function showResult(widgetKey, mode) {
     hintWrap.appendChild(div);
   }
 
-  // Mémorise l'URL cible pour le bouton « Utiliser ce widget »
-  document.getElementById('btn-use').dataset.url = makeUrl(w.file);
+  // Mémorise l'URL cible et le nom de fichier pour le bouton « Utiliser ce widget »
+  const btnUse = document.getElementById('btn-use');
+  btnUse.dataset.url  = makeUrl(w.file);
+  btnUse.dataset.file = w.file;
 
   showStep(3);
 }
@@ -664,9 +666,19 @@ document.getElementById('btn-back').addEventListener('click', () => showStep(1))
 document.getElementById('btn-restart').addEventListener('click', reset);
 document.getElementById('btn-restart-from-result').addEventListener('click', reset);
 
-document.getElementById('btn-use').addEventListener('click', () => {
-  const url = document.getElementById('btn-use').dataset.url;
-  if (url) window.location.href = url;
+document.getElementById('btn-use').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-use');
+  const url = btn.dataset.url;
+  const file = btn.dataset.file;
+  if (!url) return;
+  // Mémorise le choix dans les options Grist : au rechargement, l'assistant
+  // redirige automatiquement vers le widget choisi (sauf si #wizard est dans l'URL).
+  try {
+    if (typeof grist !== 'undefined' && file) {
+      await grist.setOption('selectedWidget', file);
+    }
+  } catch (e) { /* on continue même en cas d'erreur */ }
+  window.location.href = url;
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -677,6 +689,18 @@ document.getElementById('btn-use').addEventListener('click', () => {
 // et l'utilisateur n'a rien à reconfigurer dans Grist.
 if (typeof grist !== 'undefined') {
   grist.ready({ requiredAccess: 'read table' });
+
+  // Si un widget a déjà été choisi précédemment, on s'y rend automatiquement.
+  // Pour forcer le retour à l'assistant, ajouter #wizard à l'URL ou utiliser
+  // le bouton "↺ Choisir une autre visualisation" présent dans chaque widget.
+  grist.onOptions(opts => {
+    const forceWizard = window.location.hash === '#wizard';
+    if (forceWizard) return;
+    const saved = opts && opts.selectedWidget;
+    if (saved && /^d3js-[a-z0-9-]+\.html$/i.test(saved)) {
+      window.location.replace(makeUrl(saved));
+    }
+  });
 }
 </script>
 </body>
