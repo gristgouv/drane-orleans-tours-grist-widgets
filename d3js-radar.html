@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Radar D3.js</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --r:       10px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+    }
+    #topbar h2 { font-size: 0.9rem; }
+    #topbar-sub { font-size: 0.75rem; color: var(--muted); }
+
+    .btn-icon {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; padding: 6px 8px; border-radius: 6px;
+      color: #4a5568; line-height: 1;
+    }
+    .btn-icon:hover { background: #edf2f7; }
+    .topbar-right { display: flex; gap: 4px; }
+
+    #chart-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      min-height: 0;
+    }
+    #chart-container svg {
+      background: var(--surface);
+      border-radius: var(--r);
+      border: 1px solid var(--border);
+    }
+
+    .radar-grid {
+      fill: none;
+      stroke: #e2e6ed;
+      stroke-dasharray: 2,2;
+    }
+    .radar-axis {
+      stroke: #cbd5e0;
+      stroke-width: 1;
+    }
+    .axis-label {
+      font-size: 11px;
+      fill: var(--text);
+      font-weight: 600;
+    }
+    .level-label {
+      font-size: 9px;
+      fill: var(--muted);
+    }
+    .series-area {
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .series-point {
+      stroke: #fff;
+      stroke-width: 1;
+    }
+
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      line-height: 1.5;
+      max-width: 280px;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    #tooltip.visible { opacity: 1; }
+    #tooltip table { border-collapse: collapse; margin-top: 4px; }
+    #tooltip td { padding: 1px 6px 1px 0; font-size: 0.72rem; }
+    #tooltip td:last-child { text-align: right; font-weight: 600; }
+
+    #empty-msg {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 40px;
+    }
+
+    #legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 6px 14px 10px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      justify-content: center;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-item.muted { opacity: 0.35; }
+
+    /* ── Overlay / Config panel ── */
+    #overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: flex-end;
+    }
+    #overlay.open { display: flex; }
+    #panel {
+      width: 340px;
+      height: 100%;
+      background: white;
+      overflow-y: auto;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+    }
+    #panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; top: 0; z-index: 5;
+    }
+    #panel-header h3 { font-size: 0.95rem; }
+    #btn-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; color: #4a5568; padding: 4px 8px; border-radius: 4px;
+    }
+    #btn-close:hover { background: #edf2f7; }
+    #panel-body { padding: 16px; flex: 1; }
+    .config-section { margin-bottom: 18px; }
+    .config-section label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 6px;
+    }
+    .config-section select,
+    .config-section input[type="text"],
+    .config-section input[type="number"] {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+    }
+    .config-section select:focus,
+    .config-section input:focus { border-color: var(--accent); }
+    .config-row { display: flex; gap: 10px; }
+    .config-row .config-section { flex: 1; }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+    }
+    .checkbox-row input { cursor: pointer; }
+    .checkbox-row label {
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--text);
+      font-weight: 500;
+      margin-bottom: 0;
+    }
+
+    .cols-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2px;
+      max-height: 180px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      background: var(--bg);
+    }
+    .col-check {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 4px;
+      font-size: 0.8rem;
+      color: var(--text);
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .col-check:hover { background: var(--surface); }
+    .col-check input { cursor: pointer; }
+    .cols-empty {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-style: italic;
+      padding: 6px;
+    }
+
+    .colors-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      background: var(--bg);
+    }
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 4px;
+      font-size: 0.8rem;
+      border-radius: 3px;
+    }
+    .color-row:hover { background: var(--surface); }
+    .color-row input[type="color"] {
+      width: 32px;
+      height: 26px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px;
+      cursor: pointer;
+      background: var(--surface);
+    }
+    .color-row .color-label {
+      flex: 1;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .color-row button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .color-row button:hover { background: #fee; color: #c53030; }
+    .colors-empty {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-style: italic;
+      padding: 6px;
+    }
+
+    #panel-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; bottom: 0;
+    }
+    #btn-save {
+      width: 100%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 9px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #btn-save:hover { background: #1d4ed8; }
+    #save-msg {
+      font-size: 0.8rem;
+      color: #276749;
+      text-align: center;
+      min-height: 16px;
+      margin-top: 6px;
+      font-weight: 600;
+    }
+    #save-msg.error { color: #c53030; }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <div>
+    <h2 id="titre">Radar</h2>
+    <span id="topbar-sub"></span>
+  </div>
+  <div class="topbar-right">
+    <button id="btn-back-assistant" class="btn-icon" hidden title="Choisir une autre visualisation">&#8634;</button>
+    <button id="btn-config" class="btn-icon" title="Configuration">&#9881;</button>
+  </div>
+</div>
+
+<div id="legend"></div>
+<div id="chart-container">
+  <p id="empty-msg">Chargement des données...</p>
+</div>
+<div id="tooltip"></div>
+
+<!-- Config panel -->
+<div id="overlay">
+  <div id="panel">
+    <div id="panel-header">
+      <h3>Configuration</h3>
+      <button id="btn-close">&#10005;</button>
+    </div>
+    <div id="panel-body">
+      <div class="config-section">
+        <label for="inp-title">Titre</label>
+        <input type="text" id="inp-title" placeholder="Titre du graphique" />
+      </div>
+      <div class="config-section">
+        <label for="inp-subtitle">Sous-titre</label>
+        <input type="text" id="inp-subtitle" placeholder="Sous-titre (optionnel)" />
+      </div>
+
+      <div class="config-section">
+        <label>Colonnes numériques utilisées comme axes</label>
+        <div id="axis-grid" class="cols-grid">
+          <span class="cols-empty">Chargement...</span>
+        </div>
+      </div>
+
+      <div class="config-section">
+        <label for="sel-label">Colonne pour le nom des séries (optionnel)</label>
+        <select id="sel-label"><option value="">— numéroter les séries —</option></select>
+      </div>
+
+      <div class="config-row">
+        <div class="config-section">
+          <label for="sel-scale">Échelle</label>
+          <select id="sel-scale">
+            <option value="shared">Commune à tous les axes</option>
+            <option value="per-axis">Par axe (chaque axe a sa propre échelle)</option>
+          </select>
+        </div>
+        <div class="config-section">
+          <label for="inp-max">Max (vide = auto)</label>
+          <input type="number" id="inp-max" placeholder="auto" min="0" step="any" />
+        </div>
+      </div>
+
+      <div class="config-row">
+        <div class="config-section">
+          <label for="inp-levels">Niveaux de grille</label>
+          <input type="number" id="inp-levels" min="2" max="10" value="5" />
+        </div>
+        <div class="config-section">
+          <label for="inp-fill">Opacité du remplissage</label>
+          <input type="number" id="inp-fill" min="0" max="1" step="0.05" value="0.25" />
+        </div>
+      </div>
+
+      <div class="config-section">
+        <label for="sel-palette">Palette de couleurs</label>
+        <select id="sel-palette"></select>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-usestrokes" />
+        <label for="inp-usestrokes">Style de trait par série (daltoniens)</label>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-useshapes" />
+        <label for="inp-useshapes">Forme des points par série (daltoniens)</label>
+      </div>
+      <div class="config-section">
+        <label>Couleurs personnalisées par série</label>
+        <div id="colors-list" class="colors-list">
+          <span class="colors-empty">Configurez d'abord les axes pour personnaliser les couleurs.</span>
+        </div>
+      </div>
+
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-showpoints" checked />
+        <label for="inp-showpoints">Afficher les points</label>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-showlevels" />
+        <label for="inp-showlevels">Afficher les valeurs des niveaux</label>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-showlegend" checked />
+        <label for="inp-showlegend">Afficher la légende</label>
+      </div>
+    </div>
+    <div id="panel-footer">
+      <button id="btn-save">Enregistrer</button>
+      <p id="save-msg"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let allRecords = [];
+let config = {
+  title: '',
+  subtitle: '',
+  axisCols: [],
+  labelCol: '',
+  scaleMode: 'shared',
+  maxValue: '',         // chaîne vide = auto
+  gridLevels: 5,
+  fillOpacity: 0.25,
+  showPoints: true,
+  showLevels: false,
+  showLegend: true,
+  palette: 'Tableau10',
+  colorOverrides: {},
+  useStrokes: false,
+  useShapes: false,
+};
+
+// État dynamique : indices de séries masquées (clic sur la légende)
+const hiddenSeries = new Set();
+
+// Palettes (mêmes que les autres widgets)
+const PALETTES = {
+  'Tableau10':  d3.schemeTableau10,
+  'Category10': d3.schemeCategory10,
+  'Set1':       d3.schemeSet1,
+  'Set2':       d3.schemeSet2,
+  'Set3':       d3.schemeSet3,
+  'Paired':     d3.schemePaired,
+  'Pastel1':    d3.schemePastel1,
+  'Pastel2':    d3.schemePastel2,
+  'Accent':     d3.schemeAccent,
+  'Okabe-Ito':  ['#E69F00','#56B4E9','#009E73','#F0E442','#0072B2','#D55E00','#CC79A7','#000000'],
+  'Tol Bright': ['#4477AA','#EE6677','#228833','#CCBB44','#66CCEE','#AA3377','#BBBBBB'],
+  'Tol Muted':  ['#CC6677','#332288','#DDCC77','#117733','#88CCEE','#882255','#44AA99','#999933','#AA4499','#DDDDDD'],
+  'Tol Light':  ['#77AADD','#EE8866','#EEDD88','#FFAABB','#99DDFF','#44BB99','#BBCC33','#AAAA00','#DDDDDD'],
+  'Dark2':      d3.schemeDark2,
+};
+const CB_SAFE = new Set(['Okabe-Ito','Tol Bright','Tol Muted','Tol Light','Dark2']);
+
+// Styles de trait pour distinguer les séries (daltoniens)
+const STROKE_STYLES = ['none', '6 3', '2 3', '8 3 2 3', '4 2 1 2', '10 2'];
+
+// Symboles D3 pour les points (daltoniens)
+const SYMBOLS = [
+  d3.symbolCircle, d3.symbolSquare, d3.symbolTriangle, d3.symbolDiamond,
+  d3.symbolCross,  d3.symbolStar,   d3.symbolWye,
+];
+
+function getPaletteColors() {
+  return PALETTES[config.palette] || PALETTES['Tableau10'];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function allColumnNames(records) {
+  if (!records.length) return [];
+  return Object.keys(records[0]).filter(k => k !== 'id' && k !== 'manualSort');
+}
+
+function numericColumns(records) {
+  if (!records.length) return [];
+  return Object.keys(records[0]).filter(k => {
+    if (k === 'id' || k === 'manualSort') return false;
+    return records.some(r => typeof r[k] === 'number' && isFinite(r[k]));
+  });
+}
+
+function seriesLabelFor(record, index) {
+  if (config.labelCol && record[config.labelCol] != null && String(record[config.labelCol]).trim() !== '') {
+    return String(record[config.labelCol]);
+  }
+  return `Série ${index + 1}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIG PANEL
+// ═══════════════════════════════════════════════════════════════
+function populateSelects() {
+  const allCols = allColumnNames(allRecords);
+  const numCols = numericColumns(allRecords);
+
+  // Axes (colonnes numériques cochables)
+  const grid = document.getElementById('axis-grid');
+  if (numCols.length === 0) {
+    grid.innerHTML = '<span class="cols-empty">Aucune colonne numérique disponible</span>';
+  } else {
+    grid.innerHTML = numCols.map(col => `
+      <label class="col-check">
+        <input type="checkbox" value="${col}" ${config.axisCols.includes(col) ? 'checked' : ''}>
+        ${col}
+      </label>
+    `).join('');
+  }
+
+  // Label series
+  const selLabel = document.getElementById('sel-label');
+  selLabel.innerHTML = '<option value="">— numéroter les séries —</option>';
+  allCols.forEach(col => {
+    const opt = document.createElement('option');
+    opt.value = col;
+    opt.textContent = col;
+    selLabel.appendChild(opt);
+  });
+  selLabel.value = config.labelCol || '';
+
+  // Palette
+  const selPal = document.getElementById('sel-palette');
+  selPal.innerHTML = '';
+  const grpStd = document.createElement('optgroup');
+  grpStd.label = 'Standard';
+  const grpCb  = document.createElement('optgroup');
+  grpCb.label  = 'Accessible (daltoniens)';
+  Object.keys(PALETTES).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    (CB_SAFE.has(name) ? grpCb : grpStd).appendChild(opt);
+  });
+  selPal.appendChild(grpStd);
+  selPal.appendChild(grpCb);
+  selPal.value = config.palette;
+
+  // Inputs
+  document.getElementById('inp-title').value = config.title || '';
+  document.getElementById('inp-subtitle').value = config.subtitle || '';
+  document.getElementById('sel-scale').value = config.scaleMode;
+  document.getElementById('inp-max').value = config.maxValue;
+  document.getElementById('inp-levels').value = config.gridLevels;
+  document.getElementById('inp-fill').value = config.fillOpacity;
+  document.getElementById('inp-usestrokes').checked = !!config.useStrokes;
+  document.getElementById('inp-useshapes').checked = !!config.useShapes;
+  document.getElementById('inp-showpoints').checked = !!config.showPoints;
+  document.getElementById('inp-showlevels').checked = !!config.showLevels;
+  document.getElementById('inp-showlegend').checked = !!config.showLegend;
+
+  refreshColorsList();
+}
+
+function getSeriesLabels() {
+  // Liste des labels de séries pour la prévisualisation des couleurs
+  return allRecords.map((r, i) => seriesLabelFor(r, i));
+}
+
+function refreshColorsList() {
+  const list = document.getElementById('colors-list');
+  const paletteName = document.getElementById('sel-palette').value || config.palette;
+  const colors = PALETTES[paletteName] || PALETTES['Tableau10'];
+  const labels = getSeriesLabels();
+  list.innerHTML = '';
+
+  if (labels.length === 0) {
+    list.innerHTML = '<span class="colors-empty">Aucune donnée disponible.</span>';
+    return;
+  }
+
+  // Limiter l'affichage si beaucoup de séries
+  const displayLabels = labels.slice(0, 50);
+  if (labels.length > 50) {
+    const note = document.createElement('div');
+    note.className = 'colors-empty';
+    note.textContent = `${labels.length} séries (50 premières affichées).`;
+    list.appendChild(note);
+  }
+
+  displayLabels.forEach((cat, i) => {
+    const cur = config.colorOverrides[cat] || colors[i % colors.length];
+    const row = document.createElement('div');
+    row.className = 'color-row';
+    row.innerHTML = `
+      <input type="color" data-cat="${encodeURIComponent(cat)}" value="${cur}">
+      <span class="color-label" title="${cat}">${cat}</span>
+      <button type="button" data-reset="${encodeURIComponent(cat)}">Défaut</button>
+    `;
+    list.appendChild(row);
+  });
+
+  list.querySelectorAll('input[type="color"]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const cat = decodeURIComponent(inp.dataset.cat);
+      config.colorOverrides[cat] = inp.value;
+    });
+  });
+  list.querySelectorAll('button[data-reset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = decodeURIComponent(btn.dataset.reset);
+      delete config.colorOverrides[cat];
+      refreshColorsList();
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════
+function render() {
+  const container = document.getElementById('chart-container');
+  const emptyMsg = document.getElementById('empty-msg');
+  const legendEl = document.getElementById('legend');
+
+  container.querySelectorAll('svg').forEach(s => s.remove());
+  legendEl.innerHTML = '';
+
+  if (!config.axisCols || config.axisCols.length < 3) {
+    emptyMsg.textContent = !allRecords.length
+      ? 'Chargement des données...'
+      : 'Cochez au moins 3 colonnes numériques pour former les axes du radar.';
+    emptyMsg.style.display = '';
+    return;
+  }
+
+  // Construire les séries (1 par ligne)
+  const series = allRecords.map((r, i) => ({
+    label: seriesLabelFor(r, i),
+    values: config.axisCols.map(col => {
+      const v = parseFloat(r[col]);
+      return isFinite(v) ? v : 0;
+    }),
+    record: r,
+    index: i,
+  }));
+
+  if (series.length === 0) {
+    emptyMsg.textContent = 'Aucune donnée à afficher.';
+    emptyMsg.style.display = '';
+    return;
+  }
+  emptyMsg.style.display = 'none';
+
+  // Title & subtitle
+  document.getElementById('titre').textContent = config.title || 'Radar';
+  const subParts = [];
+  if (config.subtitle) subParts.push(config.subtitle);
+  subParts.push(`${series.length} série${series.length > 1 ? 's' : ''}`);
+  subParts.push(`${config.axisCols.length} axes`);
+  document.getElementById('topbar-sub').textContent = subParts.join(' — ');
+
+  // Dimensions
+  const rect = container.getBoundingClientRect();
+  const width  = Math.max(300, rect.width  - 24);
+  const height = Math.max(280, rect.height - 12);
+  const margin = 80;
+  const radius = Math.max(40, Math.min(width, height) / 2 - margin);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height);
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${width/2},${height/2})`);
+
+  const N = config.axisCols.length;
+  const angleSlice = (2 * Math.PI) / N;
+  const angleFor = (i) => -Math.PI / 2 + i * angleSlice;
+
+  // Calcul des max par axe ou commun
+  let maxByAxis;
+  const userMax = parseFloat(config.maxValue);
+  if (isFinite(userMax) && userMax > 0) {
+    maxByAxis = config.axisCols.map(() => userMax);
+  } else if (config.scaleMode === 'per-axis') {
+    maxByAxis = config.axisCols.map((col, i) => {
+      let m = 0;
+      for (const s of series) m = Math.max(m, s.values[i]);
+      return m > 0 ? m : 1;
+    });
+  } else {
+    let m = 0;
+    for (const s of series) for (const v of s.values) m = Math.max(m, v);
+    if (m <= 0) m = 1;
+    maxByAxis = config.axisCols.map(() => m);
+  }
+
+  const radiusFor = (axisIdx, value) => {
+    const max = maxByAxis[axisIdx];
+    return radius * Math.max(0, Math.min(1, value / max));
+  };
+
+  // Grille (polygones concentriques)
+  const levels = Math.max(2, Math.min(10, parseInt(config.gridLevels) || 5));
+  for (let lvl = 1; lvl <= levels; lvl++) {
+    const r = radius * (lvl / levels);
+    const pts = [];
+    for (let i = 0; i < N; i++) {
+      pts.push([Math.cos(angleFor(i)) * r, Math.sin(angleFor(i)) * r]);
+    }
+    g.append('polygon')
+      .attr('class', 'radar-grid')
+      .attr('points', pts.map(p => p.join(',')).join(' '));
+
+    if (config.showLevels && config.scaleMode !== 'per-axis') {
+      g.append('text')
+        .attr('class', 'level-label')
+        .attr('x', 4)
+        .attr('y', -r + 2)
+        .text(((maxByAxis[0] * lvl) / levels).toLocaleString('fr-FR'));
+    }
+  }
+
+  // Axes
+  for (let i = 0; i < N; i++) {
+    const a = angleFor(i);
+    const x = Math.cos(a) * radius;
+    const y = Math.sin(a) * radius;
+    g.append('line')
+      .attr('class', 'radar-axis')
+      .attr('x1', 0).attr('y1', 0)
+      .attr('x2', x).attr('y2', y);
+
+    // Étiquette d'axe (légèrement à l'extérieur)
+    const lx = Math.cos(a) * (radius + 14);
+    const ly = Math.sin(a) * (radius + 14);
+    let anchor = 'middle';
+    if (lx > 4) anchor = 'start';
+    else if (lx < -4) anchor = 'end';
+    g.append('text')
+      .attr('class', 'axis-label')
+      .attr('x', lx)
+      .attr('y', ly)
+      .attr('text-anchor', anchor)
+      .attr('dy', '0.35em')
+      .text(config.axisCols[i]);
+  }
+
+  // Couleurs / styles par série
+  const paletteColors = getPaletteColors();
+  const colorFor = (label, idx) => {
+    if (config.colorOverrides[label]) return config.colorOverrides[label];
+    return paletteColors[idx % paletteColors.length];
+  };
+  const strokeDashFor = (idx) => {
+    if (!config.useStrokes) return null;
+    const v = STROKE_STYLES[idx % STROKE_STYLES.length];
+    return v === 'none' ? null : v;
+  };
+  const symbolFor = (idx) => {
+    if (!config.useShapes) return d3.symbolCircle;
+    return SYMBOLS[idx % SYMBOLS.length];
+  };
+
+  const lineGen = d3.lineRadial()
+    .radius(d => d.r)
+    .angle(d => d.a)
+    .curve(d3.curveLinearClosed);
+
+  const tooltip = document.getElementById('tooltip');
+
+  // Polygones
+  series.forEach((s, idx) => {
+    if (hiddenSeries.has(s.label)) return;
+
+    const pathData = config.axisCols.map((_, i) => ({
+      a: angleFor(i) + Math.PI / 2,  // ajustement pour d3.lineRadial (0 = haut)
+      r: radiusFor(i, s.values[i]),
+    }));
+    const color = colorFor(s.label, idx);
+    const dash  = strokeDashFor(idx);
+
+    const seriesGroup = g.append('g').attr('class', 'series');
+
+    // Aire
+    seriesGroup.append('path')
+      .attr('class', 'series-area')
+      .attr('d', lineGen(pathData))
+      .attr('fill', color)
+      .attr('fill-opacity', config.fillOpacity)
+      .attr('stroke', color)
+      .attr('stroke-width', 2)
+      .attr('stroke-dasharray', dash || null)
+      .on('mouseover', function () {
+        d3.select(this).attr('fill-opacity', Math.min(1, config.fillOpacity + 0.25));
+        let html = `<strong>${s.label}</strong><table>`;
+        config.axisCols.forEach((col, i) => {
+          html += `<tr><td>${col}</td><td>${s.values[i].toLocaleString('fr-FR')}</td></tr>`;
+        });
+        html += '</table>';
+        tooltip.innerHTML = html;
+        tooltip.classList.add('visible');
+      })
+      .on('mousemove', function (event) {
+        tooltip.style.left = (event.clientX + 12) + 'px';
+        tooltip.style.top = (event.clientY - 10) + 'px';
+      })
+      .on('mouseout', function () {
+        d3.select(this).attr('fill-opacity', config.fillOpacity);
+        tooltip.classList.remove('visible');
+      });
+
+    // Points
+    if (config.showPoints) {
+      const sym = d3.symbol().type(symbolFor(idx)).size(config.useShapes ? 70 : 50);
+      config.axisCols.forEach((col, i) => {
+        const a = angleFor(i);
+        const r = radiusFor(i, s.values[i]);
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r;
+        seriesGroup.append('path')
+          .attr('class', 'series-point')
+          .attr('d', sym())
+          .attr('transform', `translate(${x},${y})`)
+          .attr('fill', color);
+      });
+    }
+  });
+
+  // Légende
+  if (config.showLegend && series.length > 1) {
+    series.forEach((s, idx) => {
+      const item = document.createElement('span');
+      item.className = 'legend-item' + (hiddenSeries.has(s.label) ? ' muted' : '');
+      const color = colorFor(s.label, idx);
+      const dash  = strokeDashFor(idx);
+      if (config.useStrokes && dash) {
+        item.innerHTML = `<svg width="22" height="10" viewBox="0 0 22 10" style="vertical-align:middle"><line x1="1" y1="5" x2="21" y2="5" stroke="${color}" stroke-width="2.5" stroke-dasharray="${dash}"/></svg>${s.label}`;
+      } else if (config.useShapes) {
+        const sym = d3.symbol().type(symbolFor(idx)).size(64);
+        item.innerHTML = `<svg width="14" height="14" viewBox="-8 -8 16 16" style="vertical-align:middle"><path d="${sym()}" fill="${color}"/></svg>${s.label}`;
+      } else {
+        item.innerHTML = `<span class="legend-dot" style="background:${color}"></span>${s.label}`;
+      }
+      item.addEventListener('click', () => {
+        if (hiddenSeries.has(s.label)) hiddenSeries.delete(s.label);
+        else hiddenSeries.add(s.label);
+        render();
+      });
+      legendEl.appendChild(item);
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAVE / OPEN PANEL
+// ═══════════════════════════════════════════════════════════════
+function openPanel() {
+  populateSelects();
+  document.getElementById('overlay').classList.add('open');
+}
+function closePanel() {
+  document.getElementById('overlay').classList.remove('open');
+}
+
+async function saveConfig() {
+  config.title = document.getElementById('inp-title').value.trim();
+  config.subtitle = document.getElementById('inp-subtitle').value.trim();
+  config.axisCols = Array.from(
+    document.querySelectorAll('#axis-grid input[type="checkbox"]:checked')
+  ).map(cb => cb.value);
+  config.labelCol = document.getElementById('sel-label').value;
+  config.scaleMode = document.getElementById('sel-scale').value;
+  config.maxValue = document.getElementById('inp-max').value.trim();
+  config.gridLevels = parseInt(document.getElementById('inp-levels').value) || 5;
+  config.fillOpacity = parseFloat(document.getElementById('inp-fill').value);
+  if (!isFinite(config.fillOpacity)) config.fillOpacity = 0.25;
+  config.palette = document.getElementById('sel-palette').value || 'Tableau10';
+  config.useStrokes = document.getElementById('inp-usestrokes').checked;
+  config.useShapes = document.getElementById('inp-useshapes').checked;
+  config.showPoints = document.getElementById('inp-showpoints').checked;
+  config.showLevels = document.getElementById('inp-showlevels').checked;
+  config.showLegend = document.getElementById('inp-showlegend').checked;
+  hiddenSeries.clear();
+
+  const msgEl = document.getElementById('save-msg');
+  try {
+    await grist.setOption('radarConfig', JSON.stringify(config));
+    msgEl.className = '';
+    msgEl.textContent = 'Sauvegardé !';
+    render();
+    setTimeout(() => { msgEl.textContent = ''; closePanel(); }, 800);
+  } catch (e) {
+    msgEl.className = 'error';
+    msgEl.textContent = 'Erreur : ' + e.message;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('btn-config').addEventListener('click', openPanel);
+document.getElementById('btn-close').addEventListener('click', closePanel);
+document.getElementById('btn-save').addEventListener('click', saveConfig);
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closePanel();
+});
+document.getElementById('overlay').addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePanel();
+});
+
+document.getElementById('sel-palette').addEventListener('change', e => {
+  config.palette = e.target.value;
+  refreshColorsList();
+});
+
+window.addEventListener('resize', () => {
+  if (config.axisCols && config.axisCols.length >= 3) render();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GRIST API
+// ═══════════════════════════════════════════════════════════════
+grist.ready({ requiredAccess: 'read table' });
+
+document.getElementById('btn-back-assistant').addEventListener('click', async () => {
+  try { await grist.setOption('selectedWidget', ''); } catch (e) {}
+  window.location.href = 'd3js-assistant.html#wizard';
+});
+
+grist.onOptions(options => {
+  document.getElementById('btn-back-assistant').hidden = !(options && options.selectedWidget);
+  if (options && options.radarConfig) {
+    try {
+      const saved = JSON.parse(options.radarConfig);
+      Object.assign(config, saved);
+    } catch (e) {}
+  }
+  render();
+});
+
+grist.onRecords(records => {
+  if (!records || records.length === 0) return;
+  allRecords = records;
+  hiddenSeries.clear();
+  render();
+});
+</script>
+</body>
+</html>
