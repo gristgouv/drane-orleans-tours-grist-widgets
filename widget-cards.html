@@ -620,32 +620,48 @@ function getImageSrc(record) {
   return null;
 }
 
+// Token d'accès Grist (réutilisable sur toutes les pièces jointes du document)
+//   { baseUrl, token, expiresAt } — expiresAt = horodatage local en ms
+let cachedToken = null;
+
+async function getValidToken() {
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 5000) {
+    return cachedToken;
+  }
+  try {
+    const tok = await grist.docApi.getAccessToken({ readOnly: true });
+    if (!tok || !tok.baseUrl || !tok.token) return null;
+    cachedToken = {
+      baseUrl:   tok.baseUrl,
+      token:     tok.token,
+      expiresAt: Date.now() + (tok.ttlMsecs || 60000),
+    };
+    return cachedToken;
+  } catch (e) {
+    console.warn('[widget-cards] grist.docApi.getAccessToken a échoué :', e);
+    return null;
+  }
+}
+
 async function resolveAttachmentUrls() {
   if (!config.imageCol) return;
-  const idsToFetch = new Set();
-  for (const r of allRecords) {
-    extractAttachmentIds(r[config.imageCol]).forEach(id => {
-      if (!attachmentUrls[id]) idsToFetch.add(id);
-    });
-  }
-  if (idsToFetch.size === 0) return;
 
-  const ids = [...idsToFetch];
-  // grist.docApi est un Proxy : on doit vraiment lancer l'appel pour savoir
-  // s'il marche (typeof renvoie toujours 'function'). On parallélise.
-  const results = await Promise.allSettled(
-    ids.map(id => grist.docApi.getAttachmentURL(id))
-  );
-  results.forEach((res, i) => {
-    const id = ids[i];
-    if (res.status === 'fulfilled' && res.value && typeof res.value === 'string') {
-      attachmentUrls[id] = res.value;
-    } else if (res.status === 'rejected') {
-      console.warn('[widget-cards] getAttachmentURL a échoué pour id=', id, res.reason);
-    } else {
-      console.warn('[widget-cards] getAttachmentURL a renvoyé une valeur invalide pour id=', id, res.value);
-    }
-  });
+  const ids = new Set();
+  for (const r of allRecords) {
+    extractAttachmentIds(r[config.imageCol]).forEach(id => ids.add(id));
+  }
+  if (ids.size === 0) { attachmentUrls = {}; return; }
+
+  const tok = await getValidToken();
+  if (!tok) return;
+
+  // Le token est commun à toutes les pièces jointes ; on reconstruit tout pour
+  // refléter une éventuelle rotation du token.
+  const fresh = {};
+  for (const id of ids) {
+    fresh[id] = `${tok.baseUrl}/attachments/${id}/download?auth=${encodeURIComponent(tok.token)}`;
+  }
+  attachmentUrls = fresh;
 }
 
 // ═══════════════════════════════════════════════════════════════
