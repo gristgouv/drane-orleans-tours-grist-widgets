@@ -593,38 +593,59 @@ function textPreview(text) {
     .trim();
 }
 
+// Extrait les IDs d'attachement depuis n'importe quel format renvoyé par Grist :
+// nombre simple (12), tableau ([12, 13]), tableau avec marqueur (["L", 12, 13]),
+// ou valeur null/vide.
+function extractAttachmentIds(v) {
+  if (v == null || v === '') return [];
+  if (typeof v === 'number' && isFinite(v)) return [v];
+  if (Array.isArray(v)) return v.filter(x => typeof x === 'number' && isFinite(x));
+  return [];
+}
+
 function getImageSrc(record) {
   if (!config.imageCol) return null;
   const v = record[config.imageCol];
   if (!v) return null;
+  // URL directement
   if (typeof v === 'string') {
-    if (/^https?:\/\//.test(v)) return v;
+    if (/^https?:\/\//i.test(v.trim())) return v.trim();
     return null;
   }
-  if (Array.isArray(v)) {
-    // Pièce jointe Grist : ['L', 12, 13, ...] ou [12]
-    const id = v.find(x => typeof x === 'number');
-    if (id != null && attachmentUrls[id]) return attachmentUrls[id];
+  // Pièce jointe Grist
+  const ids = extractAttachmentIds(v);
+  for (const id of ids) {
+    if (attachmentUrls[id]) return attachmentUrls[id];
   }
   return null;
 }
 
 async function resolveAttachmentUrls() {
-  if (!config.imageCol) { attachmentUrls = {}; return; }
-  const ids = new Set();
+  if (!config.imageCol) return;
+  const idsToFetch = new Set();
   for (const r of allRecords) {
-    const v = r[config.imageCol];
-    if (Array.isArray(v)) v.forEach(x => { if (typeof x === 'number') ids.add(x); });
+    extractAttachmentIds(r[config.imageCol]).forEach(id => {
+      if (!attachmentUrls[id]) idsToFetch.add(id);
+    });
   }
-  // On garde les URLs déjà résolues
-  for (const id of ids) {
-    if (attachmentUrls[id]) continue;
-    try {
-      if (grist.docApi && typeof grist.docApi.getAttachmentURL === 'function') {
-        attachmentUrls[id] = await grist.docApi.getAttachmentURL(id);
-      }
-    } catch (e) { /* ignore */ }
-  }
+  if (idsToFetch.size === 0) return;
+
+  const ids = [...idsToFetch];
+  // grist.docApi est un Proxy : on doit vraiment lancer l'appel pour savoir
+  // s'il marche (typeof renvoie toujours 'function'). On parallélise.
+  const results = await Promise.allSettled(
+    ids.map(id => grist.docApi.getAttachmentURL(id))
+  );
+  results.forEach((res, i) => {
+    const id = ids[i];
+    if (res.status === 'fulfilled' && res.value && typeof res.value === 'string') {
+      attachmentUrls[id] = res.value;
+    } else if (res.status === 'rejected') {
+      console.warn('[widget-cards] getAttachmentURL a échoué pour id=', id, res.reason);
+    } else {
+      console.warn('[widget-cards] getAttachmentURL a renvoyé une valeur invalide pour id=', id, res.value);
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -811,7 +832,11 @@ function buildCard(record) {
     img.src = imgSrc;
     img.alt = '';
     img.loading = 'lazy';
-    img.onerror = () => { img.replaceWith(makePlaceholder(record)); };
+    img.referrerPolicy = 'no-referrer-when-downgrade';
+    img.onerror = (e) => {
+      console.warn('[widget-cards] échec du chargement de l\'image :', imgSrc);
+      img.replaceWith(makePlaceholder(record));
+    };
     card.appendChild(img);
   } else if (config.imageCol) {
     card.appendChild(makePlaceholder(record));
