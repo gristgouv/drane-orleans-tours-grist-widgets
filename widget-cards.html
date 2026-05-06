@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Catalogue / Galerie de fiches</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --tag-bg:  #eef2ff;
+      --tag-c:   #4338ca;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --r:       12px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-size: 14px;
+    }
+
+    /* ── Topbar ── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+      gap: 12px;
+    }
+    #topbar-left h2 { font-size: 1rem; font-weight: 700; }
+    #topbar-sub { font-size: 0.75rem; color: var(--muted); }
+    .btn-icon {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; padding: 6px 8px; border-radius: 6px;
+      color: #4a5568; line-height: 1;
+    }
+    .btn-icon:hover { background: #edf2f7; }
+    .topbar-right { display: flex; gap: 4px; align-items: center; }
+
+    /* ── Toolbar (search + filters) ── */
+    #toolbar {
+      padding: 12px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .search-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    #search {
+      flex: 1;
+      padding: 9px 12px 9px 36px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") 12px center no-repeat;
+    }
+    #search:focus { outline: none; border-color: var(--accent); background-color: var(--surface); }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .filter-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+      padding: 4px 8px 4px 4px;
+      border-radius: 999px;
+      background: var(--bg);
+    }
+    .filter-group-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 0 6px;
+    }
+    .filter-chip {
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.12s;
+      white-space: nowrap;
+    }
+    .filter-chip:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .filter-chip.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    #btn-clear-filters {
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 4px 8px;
+      font-family: inherit;
+    }
+    #btn-clear-filters:hover { color: var(--accent); }
+    #btn-clear-filters[hidden] { display: none; }
+
+    /* ── Grid ── */
+    #cards {
+      flex: 1;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 14px;
+      align-content: start;
+      overflow-y: auto;
+    }
+    .size-small  #cards { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+    .size-large  #cards { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+    .size-list   #cards { grid-template-columns: 1fr; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.18s;
+      animation: fadeIn 0.25s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(37,99,235,0.10);
+    }
+    .card-image {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: var(--bg);
+      object-fit: cover;
+      display: block;
+    }
+    .card-image-placeholder {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      font-size: 2rem;
+      font-weight: 800;
+      opacity: 0.5;
+    }
+    .card-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; }
+    .card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--tag-bg);
+      color: var(--tag-c);
+      white-space: nowrap;
+    }
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .card-desc {
+      font-size: 0.83rem;
+      color: var(--muted);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      flex: 1;
+      white-space: pre-wrap;
+    }
+    .size-list .card { flex-direction: row; }
+    .size-list .card-image, .size-list .card-image-placeholder {
+      width: 200px;
+      aspect-ratio: auto;
+      height: auto;
+      flex-shrink: 0;
+    }
+    .size-list .card-desc { -webkit-line-clamp: 3; }
+
+    /* ── Empty ── */
+    #empty {
+      grid-column: 1/-1;
+      text-align: center;
+      color: var(--muted);
+      padding: 60px 20px;
+      font-size: 0.9rem;
+    }
+
+    /* ── Modal ── */
+    #modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(15,23,42,0.55);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #modal-overlay.open { display: flex; }
+    #modal {
+      background: var(--surface);
+      border-radius: var(--r);
+      max-width: 720px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    #modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 18px 22px 0;
+      gap: 12px;
+    }
+    #modal-title { font-size: 1.2rem; font-weight: 700; line-height: 1.3; }
+    #btn-modal-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.4rem; color: #4a5568;
+      padding: 4px 8px; border-radius: 6px; line-height: 1;
+    }
+    #btn-modal-close:hover { background: var(--bg); }
+    #modal-image {
+      width: 100%;
+      max-height: 320px;
+      object-fit: cover;
+      margin: 16px 0;
+      display: block;
+    }
+    #modal-image[hidden] { display: none; }
+    #modal-body { padding: 12px 22px 22px; }
+    #modal-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
+    #modal-desc {
+      font-size: 0.95rem;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      color: var(--text);
+    }
+    #modal-desc a {
+      color: var(--accent);
+      word-break: break-word;
+    }
+    #modal-desc a:hover { text-decoration: underline; }
+    #modal-extra {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    #modal-extra h4 {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .extra-row {
+      display: flex;
+      gap: 10px;
+      font-size: 0.85rem;
+      padding: 4px 0;
+    }
+    .extra-key {
+      font-weight: 600;
+      color: var(--muted);
+      min-width: 120px;
+      flex-shrink: 0;
+    }
+    .extra-val { color: var(--text); word-break: break-word; }
+
+    /* ── Config panel ── */
+    #overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: flex-end;
+    }
+    #overlay.open { display: flex; }
+    #panel {
+      width: 360px;
+      height: 100%;
+      background: white;
+      overflow-y: auto;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+    }
+    #panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; top: 0; z-index: 5;
+    }
+    #panel-header h3 { font-size: 0.95rem; }
+    #btn-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; color: #4a5568; padding: 4px 8px; border-radius: 4px;
+    }
+    #btn-close:hover { background: var(--bg); }
+    #panel-body { padding: 16px; flex: 1; }
+    .config-section { margin-bottom: 16px; }
+    .config-section label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 6px;
+    }
+    .config-section select,
+    .config-section input[type="text"] {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+    }
+    .config-section select:focus, .config-section input:focus { border-color: var(--accent); }
+    .cols-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2px;
+      max-height: 180px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px;
+      background: var(--bg);
+    }
+    .col-check {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 4px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .col-check:hover { background: var(--surface); }
+    #panel-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; bottom: 0;
+    }
+    #btn-save {
+      width: 100%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 9px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #btn-save:hover { background: #1d4ed8; }
+    #save-msg {
+      font-size: 0.8rem;
+      color: #276749;
+      text-align: center;
+      min-height: 16px;
+      margin-top: 6px;
+      font-weight: 600;
+    }
+    #save-msg.error { color: #c53030; }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="topbar-left">
+    <h2 id="titre">Catalogue</h2>
+    <span id="topbar-sub"></span>
+  </div>
+  <div class="topbar-right">
+    <button id="btn-config" class="btn-icon" title="Configuration">&#9881;</button>
+  </div>
+</div>
+
+<div id="toolbar">
+  <div class="search-row">
+    <input type="search" id="search" placeholder="Rechercher dans les fiches…" />
+    <button id="btn-clear-filters" hidden>Effacer les filtres</button>
+  </div>
+  <div class="filters" id="filters"></div>
+</div>
+
+<div id="cards">
+  <div id="empty">Configurez le widget pour afficher vos fiches.</div>
+</div>
+
+<!-- Modal détail -->
+<div id="modal-overlay">
+  <div id="modal" role="dialog" aria-modal="true">
+    <div id="modal-header">
+      <h2 id="modal-title"></h2>
+      <button id="btn-modal-close" aria-label="Fermer">&#10005;</button>
+    </div>
+    <img id="modal-image" hidden />
+    <div id="modal-body">
+      <div id="modal-tags"></div>
+      <div id="modal-desc"></div>
+      <div id="modal-extra" hidden>
+        <h4>Informations supplémentaires</h4>
+        <div id="modal-extra-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Config panel -->
+<div id="overlay">
+  <div id="panel">
+    <div id="panel-header">
+      <h3>Configuration</h3>
+      <button id="btn-close">&#10005;</button>
+    </div>
+    <div id="panel-body">
+      <div class="config-section">
+        <label for="inp-title">Titre du widget</label>
+        <input type="text" id="inp-title" placeholder="Catalogue" />
+      </div>
+      <div class="config-section">
+        <label for="sel-title-col">Colonne titre des fiches</label>
+        <select id="sel-title-col"><option value="">— choisir —</option></select>
+      </div>
+      <div class="config-section">
+        <label for="sel-desc-col">Colonne description / contenu</label>
+        <select id="sel-desc-col"><option value="">— aucune —</option></select>
+      </div>
+      <div class="config-section">
+        <label for="sel-image-col">Colonne image (URL ou pièce jointe)</label>
+        <select id="sel-image-col"><option value="">— aucune —</option></select>
+      </div>
+      <div class="config-section">
+        <label>Colonnes de tags (étiquettes affichées sur la carte)</label>
+        <div id="tag-cols-grid" class="cols-grid"></div>
+      </div>
+      <div class="config-section">
+        <label>Colonnes utilisées comme filtres</label>
+        <div id="filter-cols-grid" class="cols-grid"></div>
+      </div>
+      <div class="config-section">
+        <label for="sel-size">Taille des cartes</label>
+        <select id="sel-size">
+          <option value="small">Petite (compacte)</option>
+          <option value="medium" selected>Moyenne</option>
+          <option value="large">Grande</option>
+          <option value="list">Liste (image à gauche)</option>
+        </select>
+      </div>
+    </div>
+    <div id="panel-footer">
+      <button id="btn-save">Enregistrer</button>
+      <p id="save-msg"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let allRecords = [];
+let attachmentUrls = {};   // id → URL (pour les pièces jointes)
+let config = {
+  title: '',
+  titleCol: '',
+  descCol: '',
+  imageCol: '',
+  tagCols: [],
+  filterCols: [],
+  cardSize: 'medium',
+};
+const activeFilters = {};   // { col: Set(values) }
+let searchQuery = '';
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function allColumnNames(records) {
+  if (!records.length) return [];
+  return Object.keys(records[0]).filter(k => k !== 'id' && k !== 'manualSort');
+}
+
+function normalize(s) {
+  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// Sépare les valeurs multi-tag (« Cycle 1, Cycle 2 ») en plusieurs étiquettes
+function splitTagValue(v) {
+  if (v == null) return [];
+  if (Array.isArray(v)) {
+    // valeurs Choice List Grist commencent par 'L' ; on prend les chaînes
+    return v.filter(x => typeof x === 'string' && x.length > 0);
+  }
+  return String(v)
+    .split(/\s*[,;]\s*/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+// Encodage HTML safe
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+// Transforme le texte en HTML : URLs cliquables, dépouillage des < > autour
+function textToHtml(text) {
+  if (!text) return '';
+  let s = String(text);
+  // Retire les chevrons autour des URLs (format <https://...>)
+  s = s.replace(/<(https?:\/\/[^\s<>]+)>/g, '$1');
+  // Échappe le HTML
+  s = escapeHtml(s);
+  // Auto-link URLs
+  s = s.replace(
+    /(https?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]'"])/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+  return s;
+}
+
+// Pour la prévisualisation sur la carte (sans HTML, sans URL longue)
+function textPreview(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/<(https?:\/\/[^\s<>]+)>/g, '')   // supprime les URLs entre <>
+    .replace(/https?:\/\/\S+/g, '')             // supprime les URLs nues
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getImageSrc(record) {
+  if (!config.imageCol) return null;
+  const v = record[config.imageCol];
+  if (!v) return null;
+  if (typeof v === 'string') {
+    if (/^https?:\/\//.test(v)) return v;
+    return null;
+  }
+  if (Array.isArray(v)) {
+    // Pièce jointe Grist : ['L', 12, 13, ...] ou [12]
+    const id = v.find(x => typeof x === 'number');
+    if (id != null && attachmentUrls[id]) return attachmentUrls[id];
+  }
+  return null;
+}
+
+async function resolveAttachmentUrls() {
+  if (!config.imageCol) { attachmentUrls = {}; return; }
+  const ids = new Set();
+  for (const r of allRecords) {
+    const v = r[config.imageCol];
+    if (Array.isArray(v)) v.forEach(x => { if (typeof x === 'number') ids.add(x); });
+  }
+  // On garde les URLs déjà résolues
+  for (const id of ids) {
+    if (attachmentUrls[id]) continue;
+    try {
+      if (grist.docApi && typeof grist.docApi.getAttachmentURL === 'function') {
+        attachmentUrls[id] = await grist.docApi.getAttachmentURL(id);
+      }
+    } catch (e) { /* ignore */ }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIG PANEL
+// ═══════════════════════════════════════════════════════════════
+function populateSelects() {
+  const cols = allColumnNames(allRecords);
+
+  function fillSelect(id, placeholder, current) {
+    const sel = document.getElementById(id);
+    sel.innerHTML = `<option value="">${placeholder}</option>`;
+    cols.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      sel.appendChild(o);
+    });
+    if (current && cols.includes(current)) sel.value = current;
+  }
+
+  fillSelect('sel-title-col', '— choisir —', config.titleCol);
+  fillSelect('sel-desc-col',  '— aucune —', config.descCol);
+  fillSelect('sel-image-col', '— aucune —', config.imageCol);
+
+  function fillCheckGrid(id, current) {
+    const grid = document.getElementById(id);
+    if (cols.length === 0) {
+      grid.innerHTML = '<span style="font-size:0.8rem;color:var(--muted);font-style:italic;padding:6px">Aucune colonne</span>';
+      return;
+    }
+    grid.innerHTML = cols.map(c => `
+      <label class="col-check">
+        <input type="checkbox" value="${escapeHtml(c)}" ${current.includes(c) ? 'checked' : ''}>
+        ${escapeHtml(c)}
+      </label>
+    `).join('');
+  }
+  fillCheckGrid('tag-cols-grid', config.tagCols);
+  fillCheckGrid('filter-cols-grid', config.filterCols);
+
+  document.getElementById('inp-title').value = config.title || '';
+  document.getElementById('sel-size').value = config.cardSize || 'medium';
+}
+
+function openPanel() {
+  populateSelects();
+  document.getElementById('overlay').classList.add('open');
+}
+function closePanel() {
+  document.getElementById('overlay').classList.remove('open');
+}
+
+async function saveConfig() {
+  config.title = document.getElementById('inp-title').value.trim();
+  config.titleCol = document.getElementById('sel-title-col').value;
+  config.descCol = document.getElementById('sel-desc-col').value;
+  config.imageCol = document.getElementById('sel-image-col').value;
+  config.tagCols = Array.from(
+    document.querySelectorAll('#tag-cols-grid input[type="checkbox"]:checked')
+  ).map(cb => cb.value);
+  config.filterCols = Array.from(
+    document.querySelectorAll('#filter-cols-grid input[type="checkbox"]:checked')
+  ).map(cb => cb.value);
+  config.cardSize = document.getElementById('sel-size').value;
+
+  // Reset des filtres si la config change
+  for (const k of Object.keys(activeFilters)) delete activeFilters[k];
+
+  const msgEl = document.getElementById('save-msg');
+  try {
+    await grist.setOption('cardsConfig', JSON.stringify(config));
+    msgEl.className = '';
+    msgEl.textContent = 'Sauvegardé !';
+    await resolveAttachmentUrls();
+    render();
+    setTimeout(() => { msgEl.textContent = ''; closePanel(); }, 600);
+  } catch (e) {
+    msgEl.className = 'error';
+    msgEl.textContent = 'Erreur : ' + e.message;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FILTRES
+// ═══════════════════════════════════════════════════════════════
+function buildFilters() {
+  const filtersEl = document.getElementById('filters');
+  filtersEl.innerHTML = '';
+
+  config.filterCols.forEach(col => {
+    const values = new Set();
+    for (const r of allRecords) splitTagValue(r[col]).forEach(v => values.add(v));
+    if (values.size === 0) return;
+
+    const group = document.createElement('div');
+    group.className = 'filter-group';
+    const label = document.createElement('span');
+    label.className = 'filter-group-label';
+    label.textContent = col;
+    group.appendChild(label);
+
+    [...values].sort().forEach(val => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-chip';
+      btn.textContent = val;
+      const isActive = activeFilters[col] && activeFilters[col].has(val);
+      if (isActive) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        if (!activeFilters[col]) activeFilters[col] = new Set();
+        if (activeFilters[col].has(val)) activeFilters[col].delete(val);
+        else activeFilters[col].add(val);
+        if (activeFilters[col].size === 0) delete activeFilters[col];
+        render();
+      });
+      group.appendChild(btn);
+    });
+    filtersEl.appendChild(group);
+  });
+
+  const hasActive = Object.keys(activeFilters).length > 0;
+  document.getElementById('btn-clear-filters').hidden = !hasActive;
+}
+
+function recordMatchesFilters(r) {
+  for (const col of Object.keys(activeFilters)) {
+    const expected = activeFilters[col];
+    const values = new Set(splitTagValue(r[col]));
+    let any = false;
+    for (const v of expected) if (values.has(v)) { any = true; break; }
+    if (!any) return false;
+  }
+  return true;
+}
+
+function recordMatchesSearch(r) {
+  if (!searchQuery) return true;
+  const haystacks = [];
+  if (config.titleCol) haystacks.push(r[config.titleCol]);
+  if (config.descCol)  haystacks.push(r[config.descCol]);
+  config.tagCols.forEach(c => haystacks.push(r[c]));
+  const text = haystacks.map(v => Array.isArray(v) ? v.join(' ') : String(v ?? '')).join(' ');
+  return normalize(text).includes(normalize(searchQuery));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════
+function render() {
+  // Titre topbar
+  document.getElementById('titre').textContent = config.title || 'Catalogue';
+  document.body.className = 'size-' + (config.cardSize || 'medium');
+
+  buildFilters();
+
+  const cardsEl = document.getElementById('cards');
+  cardsEl.innerHTML = '';
+
+  if (!config.titleCol) {
+    cardsEl.innerHTML = '<div id="empty">Configurez le widget (icône ⚙) pour choisir au moins la colonne titre.</div>';
+    document.getElementById('topbar-sub').textContent = '';
+    return;
+  }
+
+  const filtered = allRecords.filter(r => recordMatchesFilters(r) && recordMatchesSearch(r));
+
+  document.getElementById('topbar-sub').textContent =
+    `${filtered.length} / ${allRecords.length} fiche${allRecords.length > 1 ? 's' : ''}`;
+
+  if (filtered.length === 0) {
+    cardsEl.innerHTML = '<div id="empty">Aucune fiche ne correspond à votre recherche / vos filtres.</div>';
+    return;
+  }
+
+  filtered.forEach(r => cardsEl.appendChild(buildCard(r)));
+}
+
+function buildCard(record) {
+  const card = document.createElement('article');
+  card.className = 'card';
+
+  const imgSrc = getImageSrc(record);
+  if (imgSrc) {
+    const img = document.createElement('img');
+    img.className = 'card-image';
+    img.src = imgSrc;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.onerror = () => { img.replaceWith(makePlaceholder(record)); };
+    card.appendChild(img);
+  } else if (config.imageCol) {
+    card.appendChild(makePlaceholder(record));
+  }
+
+  const body = document.createElement('div');
+  body.className = 'card-body';
+
+  // Tags
+  if (config.tagCols.length > 0) {
+    const tagsDiv = document.createElement('div');
+    tagsDiv.className = 'card-tags';
+    config.tagCols.forEach(col => {
+      splitTagValue(record[col]).forEach(v => {
+        const span = document.createElement('span');
+        span.className = 'tag';
+        span.textContent = v;
+        tagsDiv.appendChild(span);
+      });
+    });
+    if (tagsDiv.children.length > 0) body.appendChild(tagsDiv);
+  }
+
+  // Titre
+  const title = document.createElement('h3');
+  title.className = 'card-title';
+  title.textContent = String(record[config.titleCol] ?? '').trim() || '(sans titre)';
+  body.appendChild(title);
+
+  // Description (preview sans URLs)
+  if (config.descCol) {
+    const desc = document.createElement('p');
+    desc.className = 'card-desc';
+    desc.textContent = textPreview(record[config.descCol]);
+    body.appendChild(desc);
+  }
+
+  card.appendChild(body);
+  card.addEventListener('click', () => openModal(record));
+  return card;
+}
+
+function makePlaceholder(record) {
+  const div = document.createElement('div');
+  div.className = 'card-image-placeholder';
+  const t = String(record[config.titleCol] ?? '').trim();
+  div.textContent = t ? t.charAt(0).toUpperCase() : '?';
+  return div;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════════════════════
+function openModal(record) {
+  document.getElementById('modal-title').textContent =
+    String(record[config.titleCol] ?? '').trim() || '(sans titre)';
+
+  const img = document.getElementById('modal-image');
+  const src = getImageSrc(record);
+  if (src) { img.src = src; img.hidden = false; }
+  else     { img.hidden = true; img.removeAttribute('src'); }
+
+  const tagsEl = document.getElementById('modal-tags');
+  tagsEl.innerHTML = '';
+  config.tagCols.forEach(col => {
+    splitTagValue(record[col]).forEach(v => {
+      const span = document.createElement('span');
+      span.className = 'tag';
+      span.textContent = v;
+      tagsEl.appendChild(span);
+    });
+  });
+
+  const descEl = document.getElementById('modal-desc');
+  descEl.innerHTML = config.descCol ? textToHtml(record[config.descCol]) : '';
+
+  // Colonnes supplémentaires (autres que les déjà affichées) en bas
+  const shown = new Set([config.titleCol, config.descCol, config.imageCol, ...config.tagCols].filter(Boolean));
+  const extraCols = allColumnNames(allRecords).filter(c => !shown.has(c));
+  const extraEl = document.getElementById('modal-extra');
+  const extraList = document.getElementById('modal-extra-list');
+  extraList.innerHTML = '';
+  let hasExtra = false;
+  extraCols.forEach(col => {
+    const v = record[col];
+    if (v == null || v === '' || (Array.isArray(v) && v.length === 0)) return;
+    hasExtra = true;
+    const row = document.createElement('div');
+    row.className = 'extra-row';
+    row.innerHTML = `<span class="extra-key">${escapeHtml(col)}</span><span class="extra-val">${textToHtml(Array.isArray(v) ? splitTagValue(v).join(', ') : v)}</span>`;
+    extraList.appendChild(row);
+  });
+  extraEl.hidden = !hasExtra;
+
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('btn-config').addEventListener('click', openPanel);
+document.getElementById('btn-close').addEventListener('click', closePanel);
+document.getElementById('btn-save').addEventListener('click', saveConfig);
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closePanel();
+});
+
+document.getElementById('btn-modal-close').addEventListener('click', closeModal);
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeModal();
+    closePanel();
+  }
+});
+
+document.getElementById('search').addEventListener('input', e => {
+  searchQuery = e.target.value;
+  render();
+});
+document.getElementById('btn-clear-filters').addEventListener('click', () => {
+  for (const k of Object.keys(activeFilters)) delete activeFilters[k];
+  render();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GRIST API
+// ═══════════════════════════════════════════════════════════════
+grist.ready({ requiredAccess: 'full' });
+
+grist.onOptions(opts => {
+  if (opts && opts.cardsConfig) {
+    try { Object.assign(config, JSON.parse(opts.cardsConfig)); } catch (e) {}
+  }
+  resolveAttachmentUrls().then(render);
+});
+
+grist.onRecords(records => {
+  if (!records) return;
+  allRecords = records;
+  resolveAttachmentUrls().then(render);
+});
+</script>
+</body>
+</html>
