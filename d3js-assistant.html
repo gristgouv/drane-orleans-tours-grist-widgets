@@ -343,6 +343,26 @@
         <div class="option-title">Étudier une relation</div>
         <div class="option-desc">Voir comment deux mesures évoluent ensemble. <em>Ex&nbsp;: taille vs poids, ancienneté vs salaire.</em></div>
       </button>
+
+      <button class="option-card" data-goal="profile">
+        <div class="option-illus">
+          <svg viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+            <g transform="translate(50,32)">
+              <polygon points="0,-22 19,-7 12,16 -12,16 -19,-7" fill="none" stroke="#94a3b8" stroke-width="0.6"/>
+              <polygon points="0,-15 13,-5 8,11 -8,11 -13,-5" fill="none" stroke="#94a3b8" stroke-width="0.6"/>
+              <polygon points="0,-8 6,-2 4,5 -4,5 -6,-2" fill="none" stroke="#94a3b8" stroke-width="0.6"/>
+              <line x1="0" y1="0" x2="0" y2="-22" stroke="#94a3b8" stroke-width="0.6"/>
+              <line x1="0" y1="0" x2="19" y2="-7" stroke="#94a3b8" stroke-width="0.6"/>
+              <line x1="0" y1="0" x2="12" y2="16" stroke="#94a3b8" stroke-width="0.6"/>
+              <line x1="0" y1="0" x2="-12" y2="16" stroke="#94a3b8" stroke-width="0.6"/>
+              <line x1="0" y1="0" x2="-19" y2="-7" stroke="#94a3b8" stroke-width="0.6"/>
+              <polygon points="0,-18 16,-5 9,12 -9,9 -14,-3" fill="#a855f7" fill-opacity="0.3" stroke="#a855f7" stroke-width="1.5"/>
+            </g>
+          </svg>
+        </div>
+        <div class="option-title">Profil multi-critères</div>
+        <div class="option-desc">Comparer plusieurs profils sur plusieurs critères à la fois. <em>Ex&nbsp;: scores d'élèves par matière, performances par dimension.</em></div>
+      </button>
     </div>
   </div>
 
@@ -430,6 +450,31 @@ const WIDGETS = {
         </g>
       </svg>`,
   },
+  radar: {
+    file: 'd3js-radar.html',
+    title: 'Radar D3.js',
+    desc: "Le radar (ou diagramme en toile d'araignée) compare plusieurs entités sur plusieurs critères simultanément. Chaque axe représente un critère, chaque polygone une entité, et la forme révèle d'un coup d'œil les forces et les faiblesses.",
+    when: [
+      "Comparer des profils multi-critères (au moins 3 critères)",
+      "Mettre en évidence des forces et faiblesses",
+      "Visualiser un équilibre entre plusieurs dimensions",
+    ],
+    illus: `
+      <svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+        <g transform="translate(100,60)">
+          <polygon points="0,-44 38,-14 24,32 -24,32 -38,-14" fill="none" stroke="#94a3b8" stroke-width="0.7"/>
+          <polygon points="0,-30 26,-10 16,22 -16,22 -26,-10" fill="none" stroke="#94a3b8" stroke-width="0.7"/>
+          <polygon points="0,-16 14,-5 9,12 -9,12 -14,-5" fill="none" stroke="#94a3b8" stroke-width="0.7"/>
+          <line x1="0" y1="0" x2="0"  y2="-44" stroke="#cbd5e0"/>
+          <line x1="0" y1="0" x2="38" y2="-14" stroke="#cbd5e0"/>
+          <line x1="0" y1="0" x2="24" y2="32"  stroke="#cbd5e0"/>
+          <line x1="0" y1="0" x2="-24" y2="32" stroke="#cbd5e0"/>
+          <line x1="0" y1="0" x2="-38" y2="-14" stroke="#cbd5e0"/>
+          <polygon points="0,-36 32,-10 18,26 -18,18 -28,-6" fill="#a855f7" fill-opacity="0.25" stroke="#a855f7" stroke-width="1.8"/>
+          <polygon points="0,-22 22,-8 12,18 -10,22 -22,-12" fill="#22c55e" fill-opacity="0.2"  stroke="#22c55e" stroke-width="1.8"/>
+        </g>
+      </svg>`,
+  },
   scatter: {
     file: 'd3js-scatterplot.html',
     title: 'Scatterplot D3.js',
@@ -514,6 +559,23 @@ const FOLLOWUPS = {
       },
     ],
   },
+  profile: {
+    title: 'Combien de profils voulez-vous comparer ?',
+    options: [
+      {
+        key: 'one',
+        title: 'Un seul profil',
+        desc: "Une ligne (ou un enregistrement sélectionné) à analyser sur plusieurs axes. Le radar montre la forme du profil.",
+        result: { widget: 'radar', mode: 'single' },
+      },
+      {
+        key: 'few',
+        title: 'Plusieurs profils superposés',
+        desc: "Chaque ligne devient un polygone, comparés sur les mêmes critères. Idéal jusqu'à 4-5 profils ; au-delà, ça devient illisible.",
+        result: { widget: 'radar', mode: 'multi' },
+      },
+    ],
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -540,6 +602,13 @@ function getConfigHints(widget, mode) {
       hints.push("Cochez les colonnes numériques à inclure dans le donut.");
     }
     hints.push("Limitez à <strong>3-7 tranches</strong> pour rester lisible (regroupez les petites parts si besoin).");
+  } else if (widget === 'radar') {
+    hints.push("Cochez au moins <strong>3 colonnes numériques</strong> qui deviendront les axes du radar.");
+    hints.push("Renseignez la <strong>colonne label</strong> pour donner un nom à chaque polygone (sinon « Série 1 », « Série 2 »…).");
+    if (mode === 'multi') {
+      hints.push("Activez <strong>« Style de trait par série »</strong> et/ou <strong>« Forme des points par série »</strong> pour rester lisible si plusieurs profils se superposent.");
+    }
+    hints.push("Choisissez <strong>« Échelle commune »</strong> si vos critères sont sur la même échelle (ex: notes /20), ou <strong>« Par axe »</strong> si chaque critère a son ordre de grandeur.");
   } else if (widget === 'scatter') {
     hints.push("Sélectionnez la <strong>colonne axe X</strong> et la <strong>colonne axe Y</strong> (toutes deux numériques).");
     if (mode === 'grouped') {
@@ -557,8 +626,8 @@ function getSpecialHint(widget, mode) {
   if (widget === 'donut' && mode === 'rows') {
     return "Si plus de 7 catégories, le donut devient illisible. Préférez le <strong>Bar Chart</strong>.";
   }
-  if (widget === 'bar' && mode === 'rows') {
-    return null;
+  if (widget === 'radar' && mode === 'multi') {
+    return "Au-delà de 5 profils superposés, le radar devient illisible. Pensez à filtrer la table en amont (vue Grist filtrée).";
   }
   return null;
 }
