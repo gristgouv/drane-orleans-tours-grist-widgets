@@ -192,8 +192,9 @@
 </div>
 
 <div class="toggle-row">
-  <button class="toggle-btn active" id="btnEcoles"  onclick="switchMode('ecoles')">🏫 Écoles</button>
-  <button class="toggle-btn"        id="btnColleges" onclick="switchMode('colleges')">🏛️ Collèges</button>
+  <button class="toggle-btn active" id="btnEcoles"      onclick="switchMode('ecoles')">🏫 Écoles</button>
+  <button class="toggle-btn"        id="btnColleges"    onclick="switchMode('colleges')">🏛️ Collèges</button>
+  <button class="toggle-btn"        id="btnDepartements" onclick="switchMode('departements')">📍 Départements</button>
 </div>
 
 <div class="search-wrap">
@@ -253,6 +254,44 @@
   const BESOIN_FORMATION_26_27 = ['Besoin_formation_26_27', 'besoin_formation_26_27', 'Besoin formation 26-27'];
   const BESOIN_FORMATION_27_28 = ['Besoin_formation_27_28', 'besoin_formation_27_28', 'Besoin formation 27-28'];
   const RESOLVE = (rec, keys) => { for (const k of keys) if (rec[k] !== undefined) return rec[k]; return undefined; };
+
+  /* ════ DÉPARTEMENTS ════ */
+  const DEPT_NAMES = {
+    '001':'Ain','002':'Aisne','003':'Allier','004':'Alpes-de-Haute-Provence','005':'Hautes-Alpes',
+    '006':'Alpes-Maritimes','007':'Ardèche','008':'Ardennes','009':'Ariège','010':'Aube',
+    '011':'Aude','012':'Aveyron','013':'Bouches-du-Rhône','014':'Calvados','015':'Cantal',
+    '016':'Charente','017':'Charente-Maritime','018':'Cher','019':'Corrèze',
+    '02A':'Corse-du-Sud','02B':'Haute-Corse',
+    '021':'Côte-d\'Or','022':'Côtes-d\'Armor','023':'Creuse','024':'Dordogne','025':'Doubs',
+    '026':'Drôme','027':'Eure','028':'Eure-et-Loir','029':'Finistère',
+    '030':'Gard','031':'Haute-Garonne','032':'Gers','033':'Gironde','034':'Hérault',
+    '035':'Ille-et-Vilaine','036':'Indre','037':'Indre-et-Loire','038':'Isère',
+    '039':'Jura','040':'Landes','041':'Loir-et-Cher','042':'Loire','043':'Haute-Loire',
+    '044':'Loire-Atlantique','045':'Loiret','046':'Lot','047':'Lot-et-Garonne',
+    '048':'Lozère','049':'Maine-et-Loire','050':'Manche','051':'Marne','052':'Haute-Marne',
+    '053':'Mayenne','054':'Meurthe-et-Moselle','055':'Meuse','056':'Morbihan','057':'Moselle',
+    '058':'Nièvre','059':'Nord','060':'Oise','061':'Orne','062':'Pas-de-Calais',
+    '063':'Puy-de-Dôme','064':'Pyrénées-Atlantiques','065':'Hautes-Pyrénées','066':'Pyrénées-Orientales',
+    '067':'Bas-Rhin','068':'Haut-Rhin','069':'Rhône','070':'Haute-Saône','071':'Saône-et-Loire',
+    '072':'Sarthe','073':'Savoie','074':'Haute-Savoie','075':'Paris','076':'Seine-Maritime',
+    '077':'Seine-et-Marne','078':'Yvelines','079':'Deux-Sèvres','080':'Somme','081':'Tarn',
+    '082':'Tarn-et-Garonne','083':'Var','084':'Vaucluse','085':'Vendée','086':'Vienne',
+    '087':'Haute-Vienne','088':'Vosges','089':'Yonne','090':'Territoire de Belfort',
+    '091':'Essonne','092':'Hauts-de-Seine','093':'Seine-Saint-Denis','094':'Val-de-Marne','095':'Val-d\'Oise',
+    '971':'Guadeloupe','972':'Martinique','973':'Guyane','974':'La Réunion','976':'Mayotte'
+  };
+  function extractDept(uai) {
+    if (!uai) return null;
+    const cleaned = String(uai).trim().toUpperCase();
+    if (cleaned.length < 3) return null;
+    return cleaned.substring(0, 3);
+  }
+  function deptLabel(code) {
+    if (!code) return '—';
+    const name = DEPT_NAMES[code];
+    const display = code.replace(/^0+/, '') || code;
+    return name ? `${display} – ${name}` : `Département ${display}`;
+  }
 
   function toBool(val) {
     if (val === null || val === undefined) return false;
@@ -529,6 +568,76 @@
     }).join('');
   }
 
+  /* ════ RENDER MODE DÉPARTEMENTS ════ */
+  function renderDepartements(query) {
+    const q = norm(query.trim());
+    const container = document.getElementById('container');
+    container.className = 'mode-college';
+
+    // Grouper par département (3 premiers caractères de l'UAI école)
+    const deptMap = new Map();
+    for (const rec of allRecords) {
+      const code = extractDept(str(rec, UAI_E));
+      if (!code) continue;
+      if (!deptMap.has(code)) deptMap.set(code, { code, ecoles: [] });
+      deptMap.get(code).ecoles.push(rec);
+    }
+
+    const all = Array.from(deptMap.values()).sort((a,b) => a.code.localeCompare(b.code));
+
+    const filtered = q === '' ? all : all.filter(d => {
+      const name = norm(DEPT_NAMES[d.code] || '');
+      const num  = d.code.replace(/^0+/, '');
+      return d.code.toLowerCase().includes(q) || name.includes(q) || num.includes(q);
+    });
+
+    document.getElementById('status').textContent = q === ''
+      ? `${all.length} département${all.length>1?'s':''} • cliquez sur un département pour voir ses écoles`
+      : `${filtered.length} département${filtered.length!==1?'s':''} pour « ${query} »`;
+
+    if (!filtered.length) { container.innerHTML = emptyPrompt('Aucun département trouvé'); return; }
+
+    container.innerHTML = filtered.map(d => {
+      const counts = { p1:0, p2:0, p3:0 };
+      for (const r of d.ecoles) {
+        const rc = norm(str(r, RECONNECT));
+        if (rc.includes('tres')||rc.includes('très')) counts.p1++;
+        else if (rc.includes('moins')) counts.p3++;
+        else counts.p2++;
+      }
+
+      const badgeSummary = [
+        counts.p1 ? `<span class="badge badge-p1">🔴 ×${counts.p1}</span>` : '',
+        counts.p2 ? `<span class="badge badge-p2">🟡 ×${counts.p2}</span>` : '',
+        counts.p3 ? `<span class="badge badge-p3">🟢 ×${counts.p3}</span>` : '',
+      ].filter(Boolean).join('');
+
+      const ecoleRows = d.ecoles.map(r => ecoleRow(r, query, true)).join('');
+      const avgRow    = moyRow(`Moyenne du département`, d.ecoles);
+      const label     = deptLabel(d.code);
+
+      return `<div class="college-card">
+        <div class="college-header">
+          <div class="college-header-left">
+            <div class="college-title">📍 ${highlight(label, query)}</div>
+            <div class="college-meta">
+              <span class="tag-uai">${escHtml(d.code)}</span>
+              <span>${d.ecoles.length} école${d.ecoles.length>1?'s':''}</span>
+            </div>
+          </div>
+          <div class="college-badges">${badgeSummary}</div>
+        </div>
+        <div class="table-wrap" style="border:none;border-radius:0">
+          <table>
+            ${tableHead()}
+            <tbody>${ecoleRows}${avgRow}</tbody>
+            ${globalTfoot()}
+          </table>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
   /* ════ GESTION ÉDITION DES BESOINS ════ */
   function editEcole(e, recordId, ecoleNom) {
     e.preventDefault();
@@ -575,19 +684,23 @@
 
   /* ════ DISPATCH ════ */
   function render(query) {
-    if (mode === 'ecoles') renderEcoles(query);
-    else                   renderColleges(query);
+    if (mode === 'ecoles')         renderEcoles(query);
+    else if (mode === 'colleges')  renderColleges(query);
+    else                           renderDepartements(query);
   }
 
   function switchMode(m) {
     mode = m;
-    document.getElementById('btnEcoles').classList.toggle('active',  m==='ecoles');
-    document.getElementById('btnColleges').classList.toggle('active', m==='colleges');
+    document.getElementById('btnEcoles').classList.toggle('active',       m==='ecoles');
+    document.getElementById('btnColleges').classList.toggle('active',     m==='colleges');
+    document.getElementById('btnDepartements').classList.toggle('active', m==='departements');
     document.getElementById('searchInput').value = '';
-    document.getElementById('searchInput').placeholder =
-      m==='ecoles' ? 'Nom d\'école, de collège ou UAI…' : 'Nom de collège ou UAI…';
-    document.getElementById('headerSub').textContent =
-      m==='ecoles' ? 'Rechercher une école' : 'Rechercher un collège';
+    let placeholder, sub;
+    if (m === 'ecoles')           { placeholder = 'Nom d\'école, de collège ou UAI…'; sub = 'Rechercher une école'; }
+    else if (m === 'colleges')    { placeholder = 'Nom de collège ou UAI…';            sub = 'Rechercher un collège'; }
+    else                          { placeholder = 'Code ou nom de département…';       sub = 'Rechercher un département'; }
+    document.getElementById('searchInput').placeholder = placeholder;
+    document.getElementById('headerSub').textContent = sub;
     render('');
   }
 
