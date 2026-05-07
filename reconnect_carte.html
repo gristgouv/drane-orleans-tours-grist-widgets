@@ -176,6 +176,7 @@
       <button class="toggle-btn"        id="btnColleges"     onclick="switchMode('colleges')">🏛️ Collèges</button>
       <button class="toggle-btn"        id="btnDepartements" onclick="switchMode('departements')">📍 Départements</button>
     </div>
+    <button id="backDeptBtn" class="toggle-btn" style="display:none;border-color:var(--accent);color:var(--accent);background:var(--aclt)" onclick="clearSelectedDept()">← Retour aux départements</button>
     <div class="search-wrap">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <input id="searchInput" placeholder="Filtrer sur la carte…" autocomplete="off" />
@@ -208,6 +209,7 @@
   let selectedMarker = null;
   let currentRowId = null;
   let displayedCardRecordId = null;
+  let selectedDept = null;
   let STATS = { ordi:{}, ips:{}, reussite:{}, connexion:{} };
 
   /* ════ COLONNES ════ */
@@ -791,8 +793,8 @@
 
       document.getElementById('counter').textContent =
         `${markers.length} collège${markers.length!==1?'s':''} affiché${markers.length!==1?'s':''}`;
-    } else {
-      // Mode département
+    } else if (!selectedDept) {
+      // Mode département : vue d'ensemble
       const deptMap = buildDepartementMap();
       const filtered = Array.from(deptMap.values()).filter(d => {
         if (!q) return true;
@@ -805,18 +807,81 @@
         if (dept.lat === null || dept.lng === null) return;
         const m = L.marker([dept.lat, dept.lng], { icon: markerIcon(dept.gradientColor, true) }).addTo(map);
         m._dept = dept;
+        m.on('click', () => selectDept(dept.code));
+        markers.push(m);
+      });
+
+      document.getElementById('counter').textContent =
+        `${markers.length} département${markers.length!==1?'s':''} • cliquez pour voir les écoles et collèges`;
+    } else {
+      // Drill-down : écoles + collèges du département sélectionné
+      const ecolesDept = allRecords.filter(r => extractDept(str(r, UAI_E)) === selectedDept);
+      const filteredEcoles = ecolesDept.filter(r => {
+        if (!q) return true;
+        return norm(str(r,NOM_E)).includes(q) || norm(str(r,NOM_C)).includes(q) || norm(str(r,UAI_E)).includes(q);
+      });
+
+      // Marqueurs écoles
+      filteredEcoles.forEach(rec => {
+        const lat = fld(rec, LAT_E);
+        const lng = fld(rec, LNG_E);
+        if (lat === null || lng === null) return;
+        const cls = reconnectClass(str(rec, RECONNECT));
+        const m = L.marker([lat, lng], { icon: markerIcon(cls, false) }).addTo(map);
+        m._rec = rec;
         m.on('click', () => {
           if (selectedMarker) selectedMarker._icon?.classList.remove('selected');
           selectedMarker = m;
           m._icon?.classList.add('selected');
-          renderDepartementCard(dept);
+          renderSchoolCard(rec);
+          openCard();
+        });
+        markers.push(m);
+      });
+
+      // Collèges agrégés à partir des écoles du département
+      const collegeAgg = new Map();
+      for (const rec of ecolesDept) {
+        const uaiC = str(rec, UAI_C);
+        if (!uaiC) continue;
+        if (!collegeAgg.has(uaiC)) {
+          collegeAgg.set(uaiC, { uaiC, nomC: str(rec, NOM_C), ecoles: [], lat: null, lng: null });
+        }
+        const c = collegeAgg.get(uaiC);
+        c.ecoles.push(rec);
+        if (c.lat === null) c.lat = findCollegeCoord(rec, 'lat');
+        if (c.lng === null) c.lng = findCollegeCoord(rec, 'lng');
+      }
+      for (const c of collegeAgg.values()) {
+        const total = c.ecoles.length;
+        c.p1 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p1').length;
+        c.p2 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p2').length;
+        c.p3 = c.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p3').length;
+        const score = total > 0 ? (c.p3 + c.p2 * 0.5) / total : 0.5;
+        c.gradientColor = scoreToColor(score);
+      }
+
+      const filteredColleges = Array.from(collegeAgg.values()).filter(c => {
+        if (!q) return true;
+        return norm(c.nomC).includes(q) || norm(c.uaiC).includes(q);
+      });
+
+      filteredColleges.forEach(college => {
+        if (college.lat === null || college.lng === null) return;
+        const m = L.marker([college.lat, college.lng], { icon: markerIcon(college.gradientColor, true) }).addTo(map);
+        m._college = college;
+        m.on('click', () => {
+          if (selectedMarker) selectedMarker._icon?.classList.remove('selected');
+          selectedMarker = m;
+          m._icon?.classList.add('selected');
+          renderCollegeCard(college);
           openCard();
         });
         markers.push(m);
       });
 
       document.getElementById('counter').textContent =
-        `${markers.length} département${markers.length!==1?'s':''} affiché${markers.length!==1?'s':''}`;
+        `📍 ${deptLabel(selectedDept)} • ${filteredEcoles.length} école${filteredEcoles.length!==1?'s':''} + ${filteredColleges.length} collège${filteredColleges.length!==1?'s':''}`;
     }
 
     // Ajuster la vue sur les marqueurs visibles
@@ -829,6 +894,8 @@
   /* ════ MODE SWITCH ════ */
   function switchMode(m) {
     mode = m;
+    selectedDept = null;
+    document.getElementById('backDeptBtn').style.display = 'none';
     document.getElementById('btnEcoles').classList.toggle('active',       m==='ecoles');
     document.getElementById('btnColleges').classList.toggle('active',     m==='colleges');
     document.getElementById('btnDepartements').classList.toggle('active', m==='departements');
@@ -838,6 +905,30 @@
     else if (m === 'colleges') placeholder = 'Filtrer les collèges…';
     else                       placeholder = 'Filtrer les départements…';
     document.getElementById('searchInput').placeholder = placeholder;
+    renderMarkers('');
+  }
+
+  /* ════ SÉLECTION DÉPARTEMENT (drill-down) ════ */
+  function selectDept(code) {
+    selectedDept = code;
+    const btn = document.getElementById('backDeptBtn');
+    btn.textContent = `← Retour aux départements (${deptLabel(code)})`;
+    btn.style.display = '';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchInput').placeholder = `Filtrer dans ${deptLabel(code)}…`;
+    renderMarkers('');
+    // Afficher la carte du département
+    const deptMap = buildDepartementMap();
+    const dept = deptMap.get(code);
+    if (dept) { renderDepartementCard(dept); openCard(); }
+  }
+
+  function clearSelectedDept() {
+    selectedDept = null;
+    document.getElementById('backDeptBtn').style.display = 'none';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchInput').placeholder = 'Filtrer les départements…';
+    closeCard();
     renderMarkers('');
   }
 
