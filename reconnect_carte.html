@@ -172,8 +172,9 @@
   <div id="toolbar">
     <span class="toolbar-title">🗺️ Reconnect</span>
     <div class="toggle-row">
-      <button class="toggle-btn active" id="btnEcoles"   onclick="switchMode('ecoles')">🏫 Écoles</button>
-      <button class="toggle-btn"        id="btnColleges" onclick="switchMode('colleges')">🏛️ Collèges</button>
+      <button class="toggle-btn active" id="btnEcoles"       onclick="switchMode('ecoles')">🏫 Écoles</button>
+      <button class="toggle-btn"        id="btnColleges"     onclick="switchMode('colleges')">🏛️ Collèges</button>
+      <button class="toggle-btn"        id="btnDepartements" onclick="switchMode('departements')">📍 Départements</button>
     </div>
     <div class="search-wrap">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -230,6 +231,44 @@
   // → toute colonne contenant "college"+"lat" ou "college"+"lon/lng" est acceptée
   const LAT_C = ['college_latitude','UAI_college_latitude','lat_college','latitude_college','College_latitude'];
   const LNG_C = ['college_longitude','UAI_college_longitude','lng_college','longitude_college','College_longitude'];
+
+  /* ════ DÉPARTEMENTS ════ */
+  const DEPT_NAMES = {
+    '001':'Ain','002':'Aisne','003':'Allier','004':'Alpes-de-Haute-Provence','005':'Hautes-Alpes',
+    '006':'Alpes-Maritimes','007':'Ardèche','008':'Ardennes','009':'Ariège','010':'Aube',
+    '011':'Aude','012':'Aveyron','013':'Bouches-du-Rhône','014':'Calvados','015':'Cantal',
+    '016':'Charente','017':'Charente-Maritime','018':'Cher','019':'Corrèze',
+    '02A':'Corse-du-Sud','02B':'Haute-Corse',
+    '021':'Côte-d\'Or','022':'Côtes-d\'Armor','023':'Creuse','024':'Dordogne','025':'Doubs',
+    '026':'Drôme','027':'Eure','028':'Eure-et-Loir','029':'Finistère',
+    '030':'Gard','031':'Haute-Garonne','032':'Gers','033':'Gironde','034':'Hérault',
+    '035':'Ille-et-Vilaine','036':'Indre','037':'Indre-et-Loire','038':'Isère',
+    '039':'Jura','040':'Landes','041':'Loir-et-Cher','042':'Loire','043':'Haute-Loire',
+    '044':'Loire-Atlantique','045':'Loiret','046':'Lot','047':'Lot-et-Garonne',
+    '048':'Lozère','049':'Maine-et-Loire','050':'Manche','051':'Marne','052':'Haute-Marne',
+    '053':'Mayenne','054':'Meurthe-et-Moselle','055':'Meuse','056':'Morbihan','057':'Moselle',
+    '058':'Nièvre','059':'Nord','060':'Oise','061':'Orne','062':'Pas-de-Calais',
+    '063':'Puy-de-Dôme','064':'Pyrénées-Atlantiques','065':'Hautes-Pyrénées','066':'Pyrénées-Orientales',
+    '067':'Bas-Rhin','068':'Haut-Rhin','069':'Rhône','070':'Haute-Saône','071':'Saône-et-Loire',
+    '072':'Sarthe','073':'Savoie','074':'Haute-Savoie','075':'Paris','076':'Seine-Maritime',
+    '077':'Seine-et-Marne','078':'Yvelines','079':'Deux-Sèvres','080':'Somme','081':'Tarn',
+    '082':'Tarn-et-Garonne','083':'Var','084':'Vaucluse','085':'Vendée','086':'Vienne',
+    '087':'Haute-Vienne','088':'Vosges','089':'Yonne','090':'Territoire de Belfort',
+    '091':'Essonne','092':'Hauts-de-Seine','093':'Seine-Saint-Denis','094':'Val-de-Marne','095':'Val-d\'Oise',
+    '971':'Guadeloupe','972':'Martinique','973':'Guyane','974':'La Réunion','976':'Mayotte'
+  };
+  function extractDept(uai) {
+    if (!uai) return null;
+    const cleaned = String(uai).trim().toUpperCase();
+    if (cleaned.length < 3) return null;
+    return cleaned.substring(0, 3);
+  }
+  function deptLabel(code) {
+    if (!code) return '—';
+    const name = DEPT_NAMES[code];
+    const display = code.replace(/^0+/, '') || code;
+    return name ? `${display} – ${name}` : `Département ${display}`;
+  }
 
   function findCollegeCoord(rec, type) {
     // 1. Essai avec les candidats statiques
@@ -582,6 +621,92 @@
     return lerpColor(ORANGE, GREEN, (score - 0.5) * 2);
   }
 
+  /* ════ BUILD DÉPARTEMENT MAP ════ */
+  function buildDepartementMap() {
+    const map_ = new Map();
+    for (const rec of allRecords) {
+      const code = extractDept(str(rec, UAI_E));
+      if (!code) continue;
+      if (!map_.has(code)) {
+        map_.set(code, { code, ecoles: [], lats: [], lngs: [] });
+      }
+      const d = map_.get(code);
+      d.ecoles.push(rec);
+      const lat = fld(rec, LAT_E);
+      const lng = fld(rec, LNG_E);
+      if (lat !== null) d.lats.push(lat);
+      if (lng !== null) d.lngs.push(lng);
+    }
+    for (const d of map_.values()) {
+      d.lat = d.lats.length ? d.lats.reduce((a,b)=>a+b,0)/d.lats.length : null;
+      d.lng = d.lngs.length ? d.lngs.reduce((a,b)=>a+b,0)/d.lngs.length : null;
+      const total = d.ecoles.length;
+      const p1 = d.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p1').length;
+      const p2 = d.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p2').length;
+      const p3 = d.ecoles.filter(r => reconnectClass(str(r,RECONNECT))==='p3').length;
+      const score = total > 0 ? (p3 + p2 * 0.5) / total : 0.5;
+      d.p1 = p1; d.p2 = p2; d.p3 = p3;
+      d.gradientColor = scoreToColor(score);
+    }
+    return map_;
+  }
+
+  /* ════ CARTE DÉPARTEMENT ════ */
+  function renderDepartementCard(dept) {
+    const counts = { p1: dept.p1, p2: dept.p2, p3: dept.p3 };
+    const avg = keys => {
+      const v = dept.ecoles.map(r=>fld(r,keys)).filter(x=>x!==null);
+      return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null;
+    };
+    const total = dept.ecoles.length;
+    const pct1 = total ? counts.p1/total*100 : 0;
+    const pct2 = total ? counts.p2/total*100 : 0;
+    const pct3 = total ? counts.p3/total*100 : 0;
+
+    document.getElementById('card-header').innerHTML = `
+      <div class="card-type">📍 Département</div>
+      <div class="card-name">${escHtml(deptLabel(dept.code))}</div>
+      <div class="card-sub">
+        <span class="tag-uai">${escHtml(dept.code)}</span>
+        <span>${dept.ecoles.length} école${dept.ecoles.length>1?'s':''}</span>
+      </div>
+      <div style="margin-top:8px">
+        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;gap:1px">
+          ${pct1>0?`<div style="width:${pct1}%;background:#dc2626" title="Très prioritaire : ${counts.p1}"></div>`:''}
+          ${pct2>0?`<div style="width:${pct2}%;background:#d97706" title="Prioritaire : ${counts.p2}"></div>`:''}
+          ${pct3>0?`<div style="width:${pct3}%;background:#16a34a" title="Moins prioritaire : ${counts.p3}"></div>`:''}
+        </div>
+        <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
+          ${counts.p1?`<span class="badge badge-p1">🔴 ×${counts.p1}</span>`:''}
+          ${counts.p2?`<span class="badge badge-p2">🟡 ×${counts.p2}</span>`:''}
+          ${counts.p3?`<span class="badge badge-p3">🟢 ×${counts.p3}</span>`:''}
+        </div>
+      </div>`;
+
+    const schoolItems = dept.ecoles.map(r => `
+      <div class="school-item">
+        <div class="school-item-name">${escHtml(str(r,NOM_E)||'—')}</div>
+        <div class="school-item-sub">
+          <span class="tag-uai">${escHtml(str(r,UAI_E))}</span>
+          ${reconnectBadge(str(r,RECONNECT))}
+        </div>
+      </div>`).join('');
+
+    document.getElementById('card-body').innerHTML = `
+      <div class="ind-section">
+        <div class="ind-section-title">Moyennes du département (vs moy. globale)</div>
+        ${indRow('💻','Indicateur ordinateurs',  avg(ORDI),      'ordi',      2)}
+        ${indRow('📊','IPS moyen CM2',            avg(IPS),       'ips',       1)}
+        ${indRow('✅','Moy. réussite CM2',        avg(REUSSITE),  'reussite',  2)}
+        ${indRow('📶','Indicateur de connexion',  avg(CONNEXION), 'connexion', 1)}
+      </div>
+      <div class="card-divider"></div>
+      <div class="ind-section">
+        <div class="ind-section-title">Écoles du département (${dept.ecoles.length})</div>
+        <div class="schools-list">${schoolItems}</div>
+      </div>`;
+  }
+
   /* ════ BUILD COLLEGE MAP ════ */
   function buildCollegeMap() {
     const map_ = new Map();
@@ -642,7 +767,7 @@
       document.getElementById('counter').textContent =
         `${filtered.length} école${filtered.length!==1?'s':''} affichée${filtered.length!==1?'s':''}`;
 
-    } else {
+    } else if (mode === 'colleges') {
       // Mode collège
       const collegeMap = buildCollegeMap();
       const filtered = Array.from(collegeMap.values()).filter(c => {
@@ -666,6 +791,32 @@
 
       document.getElementById('counter').textContent =
         `${markers.length} collège${markers.length!==1?'s':''} affiché${markers.length!==1?'s':''}`;
+    } else {
+      // Mode département
+      const deptMap = buildDepartementMap();
+      const filtered = Array.from(deptMap.values()).filter(d => {
+        if (!q) return true;
+        const name = norm(DEPT_NAMES[d.code] || '');
+        const num  = d.code.replace(/^0+/, '');
+        return d.code.toLowerCase().includes(q) || name.includes(q) || num.includes(q);
+      });
+
+      filtered.forEach(dept => {
+        if (dept.lat === null || dept.lng === null) return;
+        const m = L.marker([dept.lat, dept.lng], { icon: markerIcon(dept.gradientColor, true) }).addTo(map);
+        m._dept = dept;
+        m.on('click', () => {
+          if (selectedMarker) selectedMarker._icon?.classList.remove('selected');
+          selectedMarker = m;
+          m._icon?.classList.add('selected');
+          renderDepartementCard(dept);
+          openCard();
+        });
+        markers.push(m);
+      });
+
+      document.getElementById('counter').textContent =
+        `${markers.length} département${markers.length!==1?'s':''} affiché${markers.length!==1?'s':''}`;
     }
 
     // Ajuster la vue sur les marqueurs visibles
@@ -678,11 +829,15 @@
   /* ════ MODE SWITCH ════ */
   function switchMode(m) {
     mode = m;
-    document.getElementById('btnEcoles').classList.toggle('active',  m==='ecoles');
-    document.getElementById('btnColleges').classList.toggle('active', m==='colleges');
+    document.getElementById('btnEcoles').classList.toggle('active',       m==='ecoles');
+    document.getElementById('btnColleges').classList.toggle('active',     m==='colleges');
+    document.getElementById('btnDepartements').classList.toggle('active', m==='departements');
     document.getElementById('searchInput').value = '';
-    document.getElementById('searchInput').placeholder =
-      m==='ecoles' ? 'Filtrer les écoles…' : 'Filtrer les collèges…';
+    let placeholder;
+    if (m === 'ecoles')        placeholder = 'Filtrer les écoles…';
+    else if (m === 'colleges') placeholder = 'Filtrer les collèges…';
+    else                       placeholder = 'Filtrer les départements…';
+    document.getElementById('searchInput').placeholder = placeholder;
     renderMarkers('');
   }
 
