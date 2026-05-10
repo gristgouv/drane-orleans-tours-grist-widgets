@@ -319,6 +319,73 @@
       overflow-y: auto;
     }
 
+    /* ── Bloc d'aide repliable ── */
+    .help-block {
+      margin: 8px 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #f8fafc;
+    }
+    .help-block summary {
+      cursor: pointer;
+      padding: 8px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--accent);
+      list-style: none;
+      user-select: none;
+    }
+    .help-block summary::-webkit-details-marker { display: none; }
+    .help-block summary::before {
+      content: '▸ ';
+      display: inline-block;
+      transition: transform 0.15s;
+      margin-right: 4px;
+    }
+    .help-block[open] summary::before { transform: rotate(90deg); }
+    .help-block summary:hover { background: #f1f5f9; border-radius: 6px; }
+    .help-block .help-body {
+      padding: 4px 14px 12px;
+      font-size: 0.78rem;
+      line-height: 1.55;
+      color: var(--text);
+      border-top: 1px solid var(--border);
+    }
+    .help-block ol { padding-left: 22px; margin-top: 8px; }
+    .help-block li { margin-bottom: 8px; }
+    .help-block li strong { font-weight: 700; }
+    .help-block code {
+      background: #e2e8f0;
+      color: #1e293b;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: 'Consolas', monospace;
+      font-size: 0.95em;
+    }
+    .help-block .perm-badge {
+      display: inline-block;
+      width: 18px; height: 18px;
+      text-align: center; line-height: 18px;
+      border-radius: 4px;
+      font-family: 'Consolas', monospace;
+      font-weight: 700;
+      font-size: 0.72rem;
+      margin: 0 1px;
+      vertical-align: middle;
+    }
+    .help-block .perm-badge.green { background: #16a34a; color: white; }
+    .help-block .perm-badge.red   { background: #dc2626; color: white; }
+    .help-block .help-tip {
+      background: #fef3c7;
+      border-left: 3px solid var(--warn);
+      padding: 8px 10px;
+      margin-top: 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      color: #78350f;
+    }
+    .help-block .help-tip strong { color: #92400e; }
+
     /* ── Toast ── */
     #toast {
       position: fixed;
@@ -963,11 +1030,53 @@ function renderPublicLinkSection(body) {
   const desc = el('div', { class: 'section-desc' });
   desc.innerHTML =
     "Génère une URL autonome qui peut être partagée avec un visiteur sans compte Grist. " +
-    "<strong>Prérequis côté Grist :</strong> ouvrez le document en accès public, puis ajoutez " +
-    "des <em>Access Rules</em> pour n'autoriser que la création de lignes dans cette table " +
-    "(et bloquer la lecture des autres tables). " +
-    "Voir le repo officiel <code>gristlabs/grist-form-submit</code> pour le détail des règles.";
+    "<strong>Prérequis côté Grist :</strong> ouvrez le document en accès public et ajoutez " +
+    "des <em>Access Rules</em> pour n'autoriser que la création de lignes dans cette table.";
   body.appendChild(desc);
+
+  // Bloc d'aide repliable (procédure complète)
+  const help = document.createElement('details');
+  help.className = 'help-block';
+  help.innerHTML = `
+    <summary>Voir la procédure de configuration des Access Rules</summary>
+    <div class="help-body">
+      <p>À faire une seule fois sur le document, depuis votre compte propriétaire :</p>
+      <ol>
+        <li>Ouvrez <strong>Access Rules</strong> (icône bouclier dans le panneau latéral gauche).</li>
+        <li>Section <strong>Special Rules</strong> → décochez <code>Allow editors to edit structure</code>.
+          L'avertissement rouge en haut doit disparaître.</li>
+        <li>Section <strong>Default Rules</strong> → cliquez <code>Add Default Rule</code> et saisissez :
+          <ul style="margin: 4px 0 0 18px;">
+            <li>Condition : <code>user.Access != OWNER</code></li>
+            <li>Permission : cliquez <strong>Deny All</strong> — les 4 cases doivent passer en
+              <span class="perm-badge red">R</span>
+              <span class="perm-badge red">U</span>
+              <span class="perm-badge red">C</span>
+              <span class="perm-badge red">D</span>
+              (lecture / mise à jour / création / suppression toutes interdites).</li>
+          </ul>
+        </li>
+        <li>Cliquez <strong>Add Table Rules</strong> et choisissez la table cible
+          (<code id="help-table-name">${state.tableId || 'Table1'}</code>) :
+          <ul style="margin: 4px 0 0 18px;">
+            <li>Condition : <em>laissez vide</em> (= « Everyone »).</li>
+            <li>Permission : cliquez deux fois sur <strong>C</strong> (Create) jusqu'à ce qu'il passe en
+              <span class="perm-badge green">C</span>. Les autres restent à <code>—</code>
+              (héritent du Deny par défaut).</li>
+          </ul>
+        </li>
+        <li>Cliquez <strong>Save</strong> en haut à droite pour valider les règles.</li>
+        <li>Ouvrez le menu <strong>Share</strong> (en haut à droite) → <strong>Manage Users</strong> →
+          activez <strong>Public access</strong> et choisissez le rôle <strong>Editor</strong>.</li>
+      </ol>
+      <div class="help-tip">
+        <strong>Vérification rapide :</strong> ouvrez le lien public dans une fenêtre de navigation privée
+        (sans session Grist) et soumettez un essai. Si vous obtenez l'erreur
+        <em>« Blocked by table create access rules »</em>, l'étape 4 (Allow Create sur la table cible) est
+        manquante ou mal configurée.
+      </div>
+    </div>`;
+  body.appendChild(help);
 
   body.appendChild(el('div', { class: 'col-name-row' }, [
     el('label', { for: 'standalone-title' }, 'Titre du formulaire (vu par le visiteur)'),
