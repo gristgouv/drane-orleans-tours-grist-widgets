@@ -40,6 +40,8 @@
     }
     #topbar h2 { font-size: 0.9rem; }
     #topbar-sub { font-size: 0.75rem; color: var(--muted); }
+    .config-hint { font-size: 0.72rem; color: var(--muted, #64748b); font-style: italic; margin-right: 6px; white-space: nowrap; }
+    @media (max-width: 600px) { .config-hint { display: none; } }
 
     .btn-icon {
       background: none; border: none; cursor: pointer;
@@ -329,7 +331,8 @@
   </div>
   <div class="topbar-right">
     <button id="btn-back-assistant" class="btn-icon" hidden title="Choisir une autre visualisation">&#8634;</button>
-    <button id="btn-config" class="btn-icon" title="Configuration">&#9881;</button>
+    <span class="config-hint">Cliquez sur &#9881; pour configurer</span>
+    <button id="btn-config" class="btn-icon" title="Cliquez ici pour configurer le widget">&#9881;</button>
   </div>
 </div>
 

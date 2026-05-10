@@ -23,6 +23,8 @@
     #topbar h2 { font-size: 0.95rem; color: #2d3748; }
     #aucun { font-size: 0.85rem; color: #718096; font-style: italic; }
     #topbar-actions { display: flex; align-items: center; gap: 4px; }
+    .config-hint { font-size: 0.72rem; color: #718096; font-style: italic; margin-right: 6px; white-space: nowrap; }
+    @media (max-width: 600px) { .config-hint { display: none; } }
 
     /* ── BOUTONS TOPBAR ── */
     .btn-topbar {
@@ -277,6 +279,7 @@
   </div>
   <div id="topbar-actions">
     <button id="btn-present" class="btn-topbar"></button>
+    <span id="config-hint" class="config-hint"></span>
     <button id="btn-config" class="btn-icon" title=""></button>
   </div>
 </div>
@@ -319,7 +322,8 @@ const I18N = {
   fr: {
     selectStudent:   'Sélectionnez un élève dans la table.',
     btnPresent:      '▶ Présentation',
-    btnConfig:       'Configuration',
+    btnConfig:       'Cliquez ici pour configurer le widget',
+    configHint:      'Cliquez sur ⚙ pour configurer',
     panelTitle:      '⚙️ Configuration',
     btnClose:        'Fermer le panneau',
     btnAdd:          '＋ Ajouter un graphe',
@@ -350,7 +354,8 @@ const I18N = {
   en: {
     selectStudent:   'Select a student in the table.',
     btnPresent:      '▶ Present',
-    btnConfig:       'Settings',
+    btnConfig:       'Click here to configure the widget',
+    configHint:      'Click ⚙ to configure',
     panelTitle:      '⚙️ Settings',
     btnClose:        'Close panel',
     btnAdd:          '＋ Add a chart',
@@ -391,6 +396,8 @@ function applyLang() {
   document.getElementById('btn-present').textContent   = t.btnPresent;
   document.getElementById('btn-config').textContent    = '⚙️';
   document.getElementById('btn-config').setAttribute('aria-label', t.btnConfig);
+  document.getElementById('btn-config').setAttribute('title', t.btnConfig);
+  document.getElementById('config-hint').textContent   = t.configHint;
   document.getElementById('panel-title').textContent   = t.panelTitle;
   document.getElementById('btn-close').setAttribute('aria-label', t.btnClose);
   document.getElementById('btn-close').textContent     = '✕';
