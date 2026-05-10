@@ -404,7 +404,17 @@ const state = {
   columns:   [],          // [{ colId, label, type, isFormula, formula, widgetOptions, choices }]
   validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength } }
   validationColumnName: 'Validation',
+  // Mode public / standalone (formulaire ouvert hors de Grist)
+  server:    null,        // ex. "https://grist.exemple.fr"
+  docId:     null,        // identifiant interne du doc
+  docUrl:    null,        // URL complète saisie par l'éditeur (utilisée pour générer le lien public)
+  standaloneTitle:   'Formulaire',
+  standaloneSuccess: 'Merci, votre réponse a été enregistrée.',
 };
+
+// Détection du mode standalone : on ouvre le widget directement avec #cfg=...
+const HASH_PARAMS = new URLSearchParams(window.location.hash.slice(1));
+const STANDALONE  = HASH_PARAMS.has('cfg');
 
 //
 // ─── Utilitaires ───────────────────────────────────────────────────────────
@@ -791,16 +801,67 @@ async function onSubmit(ev) {
   const submitBtn = ev.target.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
   try {
-    await grist.selectedTable.create({ fields });
-    showToast("Ligne ajoutée ✓", 'ok');
-    ev.target.reset();
-    clearErrors();
+    if (STANDALONE) {
+      await submitStandalone(fields);
+      showStandaloneSuccess();
+    } else {
+      await grist.selectedTable.create({ fields });
+      showToast("Ligne ajoutée ✓", 'ok');
+      ev.target.reset();
+      clearErrors();
+    }
   } catch (e) {
     console.error('[form-validator] échec de la création :', e);
     showToast("Échec de l'enregistrement : " + (e.message || e), 'err');
   } finally {
     submitBtn.disabled = false;
   }
+}
+
+//
+// ─── Soumission en mode standalone (visiteur non connecté) ─────────────────
+//
+async function submitStandalone(fields) {
+  if (!state.server || !state.docId || !state.tableId) {
+    throw new Error("Configuration du lien incomplète");
+  }
+  const url = `${state.server}/api/docs/${state.docId}/tables/${state.tableId}/records?utm_source=grist-forms`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'omit',
+    body: JSON.stringify({ records: [{ fields }] }),
+  });
+  if (!resp.ok) {
+    let msg = `HTTP ${resp.status}`;
+    try {
+      const j = await resp.json();
+      if (j && j.error) {
+        const km = /KeyError '(.*)'/.exec(j.error);
+        msg = km ? `Colonne « ${km[1] } » inconnue dans la table` : j.error;
+      }
+    } catch (e) { /* ignore */ }
+    throw new Error(msg);
+  }
+  return resp.json();
+}
+
+function showStandaloneSuccess() {
+  const host = document.getElementById('form-host');
+  host.innerHTML = '';
+  const card = el('div', { class: 'form-card', style: 'text-align:center; padding:36px 22px;' });
+  card.appendChild(el('div',
+    { style: 'font-size:2.6rem; color: var(--good); line-height:1;' }, '✓'));
+  card.appendChild(el('h3',
+    { style: 'margin: 12px 0 6px; font-size:1.05rem; font-weight:700;' },
+    state.standaloneSuccess));
+  card.appendChild(el('p',
+    { style: 'color: var(--muted); font-size:0.85rem; margin-bottom:18px;' },
+    "Vos données ont été ajoutées au document."));
+  const btn = el('button', { class: 'btn primary', type: 'button' }, 'Soumettre une autre réponse');
+  btn.addEventListener('click', () => location.reload());
+  card.appendChild(btn);
+  host.appendChild(card);
 }
 
 //
@@ -892,6 +953,114 @@ function renderConfigPanel() {
   }
 
   renderValidationColumnSection(body);
+  renderPublicLinkSection(body);
+}
+
+function renderPublicLinkSection(body) {
+  body.appendChild(el('div', { class: 'config-section-title' },
+    'Lien public (visiteur non connecté)'));
+
+  const desc = el('div', { class: 'section-desc' });
+  desc.innerHTML =
+    "Génère une URL autonome qui peut être partagée avec un visiteur sans compte Grist. " +
+    "<strong>Prérequis côté Grist :</strong> ouvrez le document en accès public, puis ajoutez " +
+    "des <em>Access Rules</em> pour n'autoriser que la création de lignes dans cette table " +
+    "(et bloquer la lecture des autres tables). " +
+    "Voir le repo officiel <code>gristlabs/grist-form-submit</code> pour le détail des règles.";
+  body.appendChild(desc);
+
+  body.appendChild(el('div', { class: 'col-name-row' }, [
+    el('label', { for: 'standalone-title' }, 'Titre du formulaire (vu par le visiteur)'),
+    el('input', {
+      type: 'text', id: 'standalone-title',
+      value: state.standaloneTitle || 'Formulaire', placeholder: 'Formulaire',
+    }),
+  ]));
+
+  body.appendChild(el('div', { class: 'col-name-row' }, [
+    el('label', { for: 'standalone-success' }, 'Message de confirmation après soumission'),
+    el('input', {
+      type: 'text', id: 'standalone-success',
+      value: state.standaloneSuccess || 'Merci, votre réponse a été enregistrée.',
+    }),
+  ]));
+
+  const docUrlDefault = state.docUrl
+    || (state.server && state.docId ? `${state.server}/doc/${state.docId}` : '');
+  body.appendChild(el('div', { class: 'col-name-row' }, [
+    el('label', { for: 'standalone-doc-url' }, 'URL du document Grist'),
+    el('input', {
+      type: 'text', id: 'standalone-doc-url',
+      value: docUrlDefault,
+      placeholder: 'https://votre-grist/o/orga/doc/abc123…',
+    }),
+  ]));
+
+  const genBtn = el('button', { type: 'button', class: 'btn small primary' }, 'Générer & copier le lien');
+  genBtn.addEventListener('click', onGeneratePublicLink);
+  body.appendChild(el('div', { class: 'section-actions' }, [genBtn]));
+
+  body.appendChild(el('div', {
+    id: 'public-link-output',
+    class: 'python-preview',
+    style: 'display:none; white-space: pre-wrap; word-break: break-all;',
+  }));
+}
+
+async function onGeneratePublicLink(ev) {
+  const btn = ev.currentTarget;
+
+  // Lit les valeurs courantes du panneau
+  state.validators        = readConfigPanel();
+  state.standaloneTitle   = (document.getElementById('standalone-title').value   || 'Formulaire').trim();
+  state.standaloneSuccess = (document.getElementById('standalone-success').value || 'Merci, votre réponse a été enregistrée.').trim();
+  const docUrl            = (document.getElementById('standalone-doc-url').value || '').trim();
+
+  if (!docUrl) {
+    showToast("Renseignez l'URL du document Grist", 'err');
+    return;
+  }
+  if (!parseGristDocUrl(docUrl)) {
+    showToast("URL Grist non reconnue (attendue : .../doc/{docId} ou .../{docId}/...)", 'err');
+    return;
+  }
+  state.docUrl = docUrl;
+
+  // Persiste la config (sans bloquer la génération du lien si setOption échoue)
+  try {
+    await grist.setOption('validators',        state.validators);
+    await grist.setOption('standaloneTitle',   state.standaloneTitle);
+    await grist.setOption('standaloneSuccess', state.standaloneSuccess);
+    await grist.setOption('docUrl',            state.docUrl);
+  } catch (e) { console.warn('[form-validator] setOption :', e); }
+
+  const cfg = {
+    title:          state.standaloneTitle,
+    successMessage: state.standaloneSuccess,
+    docUrl:         state.docUrl,
+    tableId:        state.tableId,
+    columns: state.columns.map(c => ({
+      colId: c.colId, label: c.label, type: c.type, choices: c.choices,
+    })),
+    validators: state.validators,
+  };
+  const cfgB64 = encodeStandaloneCfg(cfg);
+  const pageUrl = window.location.href.split('#')[0].split('?')[0];
+  const publicUrl = `${pageUrl}#cfg=${cfgB64}`;
+
+  const out = document.getElementById('public-link-output');
+  out.style.display = 'block';
+  out.textContent = publicUrl;
+
+  btn.disabled = true;
+  try {
+    await navigator.clipboard.writeText(publicUrl);
+    showToast("Lien copié dans le presse-papiers ✓", 'ok');
+  } catch (e) {
+    showToast("Lien généré (copiez-le manuellement ci-dessous)", '');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderValidationColumnSection(body) {
@@ -1148,6 +1317,13 @@ function closeConfig() { $('#config-overlay').classList.remove('open'); }
 // ─── Boot ──────────────────────────────────────────────────────────────────
 //
 async function boot() {
+  if (STANDALONE) {
+    return bootStandalone();
+  }
+  return bootGrist();
+}
+
+async function bootGrist() {
   $('#btn-config').addEventListener('click', openConfig);
   $('#btn-config-close').addEventListener('click', closeConfig);
   $('#btn-config-save').addEventListener('click', saveConfig);
@@ -1163,10 +1339,88 @@ async function boot() {
   grist.onOptions((opts) => {
     state.validators = (opts && opts.validators) || {};
     state.validationColumnName = (opts && opts.validationColumnName) || 'Validation';
+    state.standaloneTitle      = (opts && opts.standaloneTitle)   || 'Formulaire';
+    state.standaloneSuccess    = (opts && opts.standaloneSuccess) || 'Merci, votre réponse a été enregistrée.';
+    state.docUrl               = (opts && opts.docUrl) || null;
     renderForm();
   });
 
+  // Récupère le serveur + docId pour pouvoir générer le lien public
+  try {
+    const tok = await grist.docApi.getAccessToken({ readOnly: true });
+    const m = /^(https?:\/\/[^\/]+(?:\/o\/[^\/]+)?)\/api\/docs\/([^\/?#]+)/.exec(tok.baseUrl);
+    if (m) { state.server = m[1]; state.docId = m[2]; }
+  } catch (e) {
+    console.warn('[form-validator] getAccessToken a échoué :', e);
+  }
+
   await refresh();
+}
+
+async function bootStandalone() {
+  // Masque les boutons inutiles pour un visiteur non connecté
+  const btnConfig  = document.getElementById('btn-config');
+  const btnRefresh = document.getElementById('btn-refresh');
+  const hint       = document.querySelector('.config-hint');
+  if (btnConfig)  btnConfig.style.display  = 'none';
+  if (btnRefresh) btnRefresh.style.display = 'none';
+  if (hint)       hint.style.display       = 'none';
+
+  try {
+    const cfg = decodeStandaloneCfg(HASH_PARAMS.get('cfg'));
+
+    state.tableId            = cfg.tableId;
+    state.columns            = cfg.columns || [];
+    state.validators         = cfg.validators || {};
+    state.standaloneTitle    = cfg.title || 'Formulaire';
+    state.standaloneSuccess  = cfg.successMessage || 'Merci, votre réponse a été enregistrée.';
+
+    const parsed = parseGristDocUrl(cfg.docUrl || '');
+    if (!parsed) throw new Error("URL Grist invalide dans le lien");
+    state.server = parsed.server;
+    state.docId  = parsed.docId;
+
+    document.querySelector('#topbar-left h2').textContent = state.standaloneTitle;
+    document.getElementById('topbar-sub').textContent     = '';
+    document.title = state.standaloneTitle;
+
+    renderForm();
+  } catch (e) {
+    console.error('[form-validator] cfg invalide :', e);
+    document.querySelector('#topbar-left h2').textContent = 'Formulaire';
+    document.getElementById('topbar-sub').textContent     = '';
+    const host = document.getElementById('form-host');
+    host.innerHTML = '';
+    host.appendChild(el('div', { class: 'form-empty' },
+      ["Lien invalide : " + (e.message || e)]));
+  }
+}
+
+function parseGristDocUrl(url) {
+  // baseUrl provenant de getAccessToken : https://server[/o/orga]/api/docs/{docId}
+  let m = /^(https?:\/\/[^\/]+(?:\/o\/[^\/]+)?)\/api\/docs\/([^\/?#]+)/.exec(url);
+  if (m) return { server: m[1], docId: m[2] };
+  // URL classique avec /doc/ : https://server[/o/orga]/doc/{docId}[/page]
+  m = /^(https?:\/\/[^\/]+(?:\/o\/[^\/]+)?)\/doc\/([^\/?#]+)/.exec(url);
+  if (m) return { server: m[1], docId: m[2] };
+  // URL self-host raccourcie : https://server[/o/orga]/{docIdLong}/{page}
+  m = /^(https?:\/\/[^\/]+(?:\/o\/[^\/]+)?)\/([^\/?#]{12,})(?:\/|$)/.exec(url);
+  if (m) return { server: m[1], docId: m[2] };
+  return null;
+}
+
+function encodeStandaloneCfg(obj) {
+  const json = JSON.stringify(obj);
+  // base64 URL-safe (avec gestion UTF-8)
+  return btoa(unescape(encodeURIComponent(json)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeStandaloneCfg(b64) {
+  if (!b64) throw new Error("Paramètre cfg manquant");
+  let s = b64.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  return JSON.parse(decodeURIComponent(escape(atob(s))));
 }
 
 async function refresh() {
