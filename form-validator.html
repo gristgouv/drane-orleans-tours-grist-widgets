@@ -264,6 +264,61 @@
       line-height: 1.4;
     }
 
+    /* ── Section "Validation côté Grist" ── */
+    .config-section-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 18px 0 8px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .section-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+    .section-desc code {
+      background: var(--aclt);
+      color: var(--accent);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: 'Consolas', monospace;
+      font-size: 0.78em;
+    }
+    .col-name-row { margin-bottom: 8px; }
+    .col-name-row label {
+      font-size: 0.72rem; color: var(--muted); margin-bottom: 2px;
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+      display: block;
+    }
+    .col-name-row input {
+      width: 100%; padding: 6px 8px;
+      border: 1px solid var(--border); border-radius: 5px;
+      font-size: 0.82rem; font-family: inherit;
+    }
+    .section-actions {
+      display: flex; gap: 6px; flex-wrap: wrap;
+    }
+    .btn.small { padding: 6px 10px; font-size: 0.78rem; }
+    .python-preview {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      white-space: pre;
+      overflow-x: auto;
+      margin-top: 8px;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
     /* ── Toast ── */
     #toast {
       position: fixed;
@@ -348,6 +403,7 @@ const state = {
   tableId:   null,
   columns:   [],          // [{ colId, label, type, isFormula, formula, widgetOptions, choices }]
   validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength } }
+  validationColumnName: 'Validation',
 };
 
 //
@@ -834,6 +890,38 @@ function renderConfigPanel() {
 
     body.appendChild(card);
   }
+
+  renderValidationColumnSection(body);
+}
+
+function renderValidationColumnSection(body) {
+  body.appendChild(el('div', { class: 'config-section-title' },
+    'Validation côté Grist (formulaires natifs)'));
+
+  const desc = el('div', { class: 'section-desc' });
+  desc.innerHTML =
+    "Génère une <strong>colonne formule Python</strong> qui applique les mêmes règles aux lignes ajoutées via " +
+    "un formulaire Grist natif (ou tout autre source). La colonne contient le détail des erreurs " +
+    "(<code>''</code> si la ligne est valide). Vous pouvez ensuite filtrer les lignes invalides dans Grist " +
+    "ou ajouter une mise en forme conditionnelle.";
+  body.appendChild(desc);
+
+  const colName = state.validationColumnName || 'Validation';
+  body.appendChild(el('div', { class: 'col-name-row' }, [
+    el('label', { for: 'validation-col-name' }, 'Nom de la colonne de validation'),
+    el('input', {
+      type: 'text', id: 'validation-col-name',
+      value: colName, placeholder: 'Validation',
+    }),
+  ]));
+
+  const previewBtn = el('button', { type: 'button', class: 'btn small' }, 'Voir le code Python');
+  const applyBtn   = el('button', { type: 'button', class: 'btn small primary' }, 'Créer / Mettre à jour la colonne');
+  previewBtn.addEventListener('click', onPreviewFormula);
+  applyBtn.addEventListener('click', onApplyValidationColumn);
+
+  body.appendChild(el('div', { class: 'section-actions' }, [previewBtn, applyBtn]));
+  body.appendChild(el('pre', { class: 'python-preview', id: 'python-preview', style: 'display:none;' }));
 }
 
 function readConfigPanel() {
@@ -854,14 +942,202 @@ function readConfigPanel() {
 
 async function saveConfig() {
   state.validators = readConfigPanel();
+  const colNameInput = document.getElementById('validation-col-name');
+  if (colNameInput) state.validationColumnName = (colNameInput.value || 'Validation').trim();
   try {
     await grist.setOption('validators', state.validators);
+    await grist.setOption('validationColumnName', state.validationColumnName);
     showToast("Règles enregistrées ✓", 'ok');
     renderForm();   // refresh des inputs (regex maxlength, etc.)
     closeConfig();
   } catch (e) {
     console.error('[form-validator] setOption a échoué :', e);
     showToast("Échec de l'enregistrement de la config", 'err');
+  }
+}
+
+//
+// ─── Génération de la formule Python ───────────────────────────────────────
+//
+function escapePyStr(s) {
+  // Échappe pour une chaîne Python entre apostrophes simples
+  return String(s)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t');
+}
+
+const PY_PRESETS = {
+  email: { pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$', msg: 'adresse e-mail invalide' },
+  phone: { pattern: '^[\\d\\s+().\\-]{6,}$',          msg: 'numéro de téléphone invalide' },
+  url:   { pattern: '^https?://[^\\s]+$',             msg: 'URL invalide' },
+};
+
+function generateValidationFormula() {
+  const out = ['import re', '', 'errors = []', ''];
+  let hasAnyRule = false;
+
+  for (const col of state.columns) {
+    const ovr = state.validators[col.colId];
+    if (!ovr || Object.keys(ovr).length === 0) continue;
+
+    const ref  = `$${col.colId}`;
+    const lbl  = escapePyStr(col.label || col.colId);
+    const base = baseTypeOf(col.type);
+    const customMsg = ovr.errorMsg ? escapePyStr(ovr.errorMsg) : null;
+
+    let block = false; // a-t-on écrit au moins une règle pour cette colonne ?
+
+    // ── Numeric / Int : min / max ──
+    if ((base === 'Numeric' || base === 'Int') &&
+        ((ovr.min !== undefined && ovr.min !== '') || (ovr.max !== undefined && ovr.max !== ''))) {
+      if (!block) { out.push(`# ${col.colId} (${col.type})`); out.push(`v = ${ref}`); block = true; }
+      out.push(`if v not in (None, ''):`);
+      out.push(`    try:`);
+      out.push(`        _n = float(v)`);
+      if (ovr.min !== undefined && ovr.min !== '') {
+        const m = customMsg || `doit être >= ${ovr.min}`;
+        out.push(`        if _n < ${Number(ovr.min)}:`);
+        out.push(`            errors.append('${lbl} : ${m}')`);
+      }
+      if (ovr.max !== undefined && ovr.max !== '') {
+        const m = customMsg || `doit être <= ${ovr.max}`;
+        out.push(`        if _n > ${Number(ovr.max)}:`);
+        out.push(`            errors.append('${lbl} : ${m}')`);
+      }
+      out.push(`    except (TypeError, ValueError):`);
+      out.push(`        errors.append('${lbl} : doit être un nombre')`);
+      hasAnyRule = true;
+    }
+
+    // ── Text / Any : longueur, format, regex ──
+    if ((base === 'Text' || base === 'Any') &&
+        (ovr.minLength || ovr.maxLength ||
+         (ovr.format && ovr.format !== 'none') ||
+         (ovr.regex && ovr.regex.trim()))) {
+      if (!block) { out.push(`# ${col.colId} (${col.type})`); out.push(`v = ${ref}`); block = true; }
+      out.push(`s = '' if v in (None, '') else str(v)`);
+
+      if (ovr.minLength) {
+        const m = customMsg || `longueur minimale ${ovr.minLength}`;
+        out.push(`if len(s) < ${Number(ovr.minLength)}:`);
+        out.push(`    errors.append('${lbl} : ${m}')`);
+      }
+      if (ovr.maxLength) {
+        const m = customMsg || `longueur maximale ${ovr.maxLength}`;
+        out.push(`if len(s) > ${Number(ovr.maxLength)}:`);
+        out.push(`    errors.append('${lbl} : ${m}')`);
+      }
+
+      // Regex personnalisée (prioritaire)
+      if (ovr.regex && ovr.regex.trim()) {
+        const m = customMsg || 'format invalide';
+        const pat = escapePyStr(ovr.regex);
+        out.push(`if s and not re.fullmatch('${pat}', s):`);
+        out.push(`    errors.append('${lbl} : ${m}')`);
+      }
+      // Sinon : format prédéfini
+      else if (ovr.format && ovr.format !== 'none') {
+        const preset = PY_PRESETS[ovr.format];
+        if (preset) {
+          const m = customMsg || preset.msg;
+          out.push(`if s and not re.fullmatch('${preset.pattern}', s):`);
+          out.push(`    errors.append('${lbl} : ${m}')`);
+        }
+      }
+      hasAnyRule = true;
+    }
+
+    if (block) out.push('');
+  }
+
+  if (!hasAnyRule) {
+    return "return ''  # Aucune règle de validation configurée";
+  }
+  out.push("return ' ; '.join(errors) if errors else ''");
+  return out.join('\n');
+}
+
+//
+// ─── Application de la colonne via applyUserActions ────────────────────────
+//
+async function applyValidationColumn(colName) {
+  const tableId = state.tableId;
+  if (!tableId) throw new Error("Aucune table associée au widget");
+
+  const formula = generateValidationFormula();
+
+  // Cherche si la colonne existe déjà (data ou formule)
+  const tables = await grist.docApi.fetchTable('_grist_Tables');
+  const cols   = await grist.docApi.fetchTable('_grist_Tables_column');
+
+  let parentId = null;
+  for (let i = 0; i < tables.id.length; i++) {
+    if (tables.tableId[i] === tableId) { parentId = tables.id[i]; break; }
+  }
+
+  let exists = false;
+  let isFormula = false;
+  for (let i = 0; i < cols.id.length; i++) {
+    if (cols.parentId[i] === parentId && cols.colId[i] === colName) {
+      exists = true;
+      isFormula = !!cols.isFormula[i];
+      break;
+    }
+  }
+
+  if (exists && !isFormula) {
+    throw new Error(
+      `La colonne « ${colName} » existe déjà comme colonne de données. ` +
+      `Choisissez un autre nom ou supprimez-la d'abord dans Grist.`
+    );
+  }
+
+  const action = exists
+    ? ['ModifyColumn', tableId, colName, { type: 'Text', isFormula: true, formula }]
+    : ['AddColumn',    tableId, colName, { type: 'Text', isFormula: true, formula, label: 'Erreurs de validation' }];
+
+  await grist.docApi.applyUserActions([action]);
+}
+
+function onPreviewFormula() {
+  // Récupère la config courante du panneau (sans l'enregistrer)
+  state.validators = readConfigPanel();
+  const code = generateValidationFormula();
+  const pre = document.getElementById('python-preview');
+  pre.textContent = code;
+  pre.style.display = 'block';
+}
+
+async function onApplyValidationColumn(ev) {
+  const btn = ev.currentTarget;
+  state.validators = readConfigPanel();
+
+  const input = document.getElementById('validation-col-name');
+  const colName = (input.value || 'Validation').trim();
+  if (!colName) {
+    showToast("Donnez un nom à la colonne", 'err');
+    return;
+  }
+  // Sanitize : Grist accepte lettres, chiffres, underscore. On remplace les autres par _
+  const cleanName = colName.replace(/[^A-Za-z0-9_]/g, '_').replace(/^(\d)/, '_$1');
+  if (cleanName !== colName) input.value = cleanName;
+
+  btn.disabled = true;
+  try {
+    await applyValidationColumn(cleanName);
+    state.validationColumnName = cleanName;
+    await grist.setOption('validators', state.validators);
+    await grist.setOption('validationColumnName', cleanName);
+    showToast(`Colonne « ${cleanName} » créée/mise à jour ✓`, 'ok');
+    await refresh();
+  } catch (e) {
+    console.error('[form-validator] applyValidationColumn:', e);
+    showToast(e.message || String(e), 'err');
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -886,6 +1162,7 @@ async function boot() {
   // Récupère les options sauvegardées
   grist.onOptions((opts) => {
     state.validators = (opts && opts.validators) || {};
+    state.validationColumnName = (opts && opts.validationColumnName) || 'Validation';
     renderForm();
   });
 
