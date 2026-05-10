@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Formulaire validé</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --good:    #16a34a;
+      --good-bg: #f0fdf4;
+      --bad:     #dc2626;
+      --bad-bg:  #fef2f2;
+      --warn:    #d97706;
+      --r:       10px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-size: 14px;
+    }
+
+    /* ── Topbar ── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+      gap: 12px;
+    }
+    #topbar-left h2 { font-size: 1rem; font-weight: 700; }
+    #topbar-sub { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+    .config-hint { font-size: 0.72rem; color: var(--muted, #64748b); font-style: italic; margin-right: 6px; white-space: nowrap; }
+    @media (max-width: 600px) { .config-hint { display: none; } }
+    .btn-icon {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; padding: 6px 8px; border-radius: 6px;
+      color: #4a5568; line-height: 1;
+    }
+    .btn-icon:hover { background: #edf2f7; }
+
+    /* ── Main form ── */
+    main {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+    }
+    .form-card {
+      max-width: 720px;
+      margin: 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 20px 22px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .form-empty {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 28px;
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-radius: var(--r);
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+    .field label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .field .meta {
+      font-size: 0.7rem;
+      font-weight: 400;
+      color: var(--muted);
+      margin-left: 6px;
+    }
+    .field input[type="text"],
+    .field input[type="number"],
+    .field input[type="date"],
+    .field input[type="datetime-local"],
+    .field input[type="email"],
+    .field input[type="tel"],
+    .field input[type="url"],
+    .field select,
+    .field textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 7px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      background: var(--surface);
+      color: var(--text);
+    }
+    .field textarea { min-height: 70px; resize: vertical; }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .field.has-error input,
+    .field.has-error select,
+    .field.has-error textarea {
+      border-color: var(--bad);
+      background: var(--bad-bg);
+    }
+    .field .error {
+      display: none;
+      font-size: 0.75rem;
+      color: var(--bad);
+      margin-top: 4px;
+    }
+    .field.has-error .error { display: block; }
+
+    .field-checkbox {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 0;
+    }
+    .field-checkbox input { width: 16px; height: 16px; }
+    .field-checkbox label { margin: 0; cursor: pointer; }
+
+    .multi-tags {
+      display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;
+    }
+    .multi-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--aclt); color: var(--accent);
+      padding: 2px 8px; border-radius: 999px; font-size: 0.75rem;
+    }
+    .multi-tag button {
+      background: none; border: none; cursor: pointer;
+      color: var(--accent); padding: 0; font-size: 0.9rem;
+      line-height: 1;
+    }
+
+    .actions {
+      display: flex; gap: 8px; justify-content: flex-end;
+      margin-top: 18px; padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .btn {
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+    .btn.primary:hover { background: #1d4ed8; color: white; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Config panel ── */
+    #config-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      z-index: 50;
+      align-items: stretch;
+      justify-content: flex-end;
+    }
+    #config-overlay.open { display: flex; }
+    #config-panel {
+      width: 100%;
+      max-width: 480px;
+      background: var(--surface);
+      box-shadow: -4px 0 16px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+    }
+    #config-panel header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    #config-panel header h3 { font-size: 1rem; }
+    #config-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 18px;
+    }
+    .col-config {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .col-config-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .col-config-head strong { font-size: 0.88rem; }
+    .col-config-head .type-badge {
+      font-size: 0.7rem;
+      background: var(--aclt);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-family: 'Consolas', monospace;
+    }
+    .col-config .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .col-config label {
+      display: block;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 2px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .col-config input, .col-config select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-size: 0.82rem;
+      font-family: inherit;
+    }
+    .col-config input:focus, .col-config select:focus {
+      outline: none; border-color: var(--accent);
+    }
+    .col-config .full { grid-column: 1 / -1; }
+    .col-config .hint {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--text);
+      color: white;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s;
+      z-index: 100;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    #toast.ok { background: var(--good); }
+    #toast.err { background: var(--bad); }
+
+    .req-mark { color: var(--bad); margin-left: 2px; }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="topbar-left">
+    <h2>Formulaire validé</h2>
+    <div id="topbar-sub">Chargement…</div>
+  </div>
+  <div>
+    <button class="btn-icon" id="btn-refresh" title="Recharger le schéma">⟳</button>
+    <span class="config-hint">Cliquez sur ⚙ pour configurer</span>
+    <button class="btn-icon" id="btn-config" title="Cliquez ici pour configurer le widget">⚙</button>
+  </div>
+</div>
+
+<main>
+  <div id="form-host"></div>
+</main>
+
+<!-- Config side-panel -->
+<div id="config-overlay">
+  <div id="config-panel">
+    <header>
+      <h3>Règles de validation par colonne</h3>
+      <button class="btn-icon" id="btn-config-close" title="Fermer">✕</button>
+    </header>
+    <div id="config-body"></div>
+    <div class="actions" style="border-top: 1px solid var(--border); padding: 12px 18px;">
+      <button class="btn" id="btn-config-reset">Tout réinitialiser</button>
+      <button class="btn primary" id="btn-config-save">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+//
+// ─── Constantes ────────────────────────────────────────────────────────────
+//
+const FORMAT_PRESETS = {
+  none:  { regex: null, msg: '' },
+  email: { regex: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,                   msg: "Adresse e-mail invalide" },
+  phone: { regex: /^[\d\s+().\-]{6,}$/,                            msg: "Numéro de téléphone invalide" },
+  url:   { regex: /^https?:\/\/[^\s]+$/i,                          msg: "URL invalide (doit commencer par http:// ou https://)" },
+};
+
+// Colonnes Grist à ignorer côté formulaire
+function isHiddenCol(colId) {
+  return colId === 'manualSort' || colId.startsWith('gristHelper_') || colId.startsWith('#');
+}
+
+// État global
+const state = {
+  ready:     false,
+  tableId:   null,
+  columns:   [],          // [{ colId, label, type, isFormula, formula, widgetOptions, choices }]
+  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength } }
+};
+
+//
+// ─── Utilitaires ───────────────────────────────────────────────────────────
+//
+function $(sel, root = document) { return root.querySelector(sel); }
+function el(tag, attrs = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+    else if (v !== null && v !== undefined && v !== false) e.setAttribute(k, v);
+  }
+  for (const c of [].concat(children)) {
+    if (c == null) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+function showToast(msg, kind = '') {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show ' + kind;
+  clearTimeout(showToast._tid);
+  showToast._tid = setTimeout(() => { t.className = ''; }, 2400);
+}
+
+function baseTypeOf(gristType) {
+  // Ex. "DateTime:UTC" -> "DateTime", "Ref:Table1" -> "Ref"
+  if (!gristType) return 'Any';
+  return gristType.split(':')[0];
+}
+
+function parseWidgetOptions(raw) {
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch (e) { return {}; }
+}
+
+//
+// ─── Lecture du schéma ─────────────────────────────────────────────────────
+//
+async function loadSchema() {
+  const tableId = await grist.selectedTable.getTableId();
+  state.tableId = tableId;
+
+  // Récupère la table _grist_Tables pour trouver le rowId interne de tableId
+  const tables   = await grist.docApi.fetchTable('_grist_Tables');
+  const cols     = await grist.docApi.fetchTable('_grist_Tables_column');
+
+  let parentId = null;
+  for (let i = 0; i < tables.id.length; i++) {
+    if (tables.tableId[i] === tableId) { parentId = tables.id[i]; break; }
+  }
+  if (parentId == null) throw new Error("Table introuvable dans les métadonnées : " + tableId);
+
+  const out = [];
+  for (let i = 0; i < cols.id.length; i++) {
+    if (cols.parentId[i] !== parentId) continue;
+    const colId = cols.colId[i];
+    if (isHiddenCol(colId)) continue;
+
+    const isFormula = !!cols.isFormula[i];
+    const formula   = cols.formula[i] || '';
+    // Une colonne calculée (formula non vide ET isFormula true) ne doit pas être éditable
+    if (isFormula && formula.trim() !== '') continue;
+
+    const widgetOptions = parseWidgetOptions(cols.widgetOptions[i]);
+    const choices = Array.isArray(widgetOptions.choices) ? widgetOptions.choices : null;
+
+    out.push({
+      colId,
+      label: cols.label[i] || colId,
+      type: cols.type[i] || 'Any',
+      isFormula,
+      widgetOptions,
+      choices,
+    });
+  }
+  state.columns = out;
+}
+
+//
+// ─── Validation ────────────────────────────────────────────────────────────
+//
+// Retourne { value, error } : value = valeur convertie pour Grist, error = message ou null
+function validateField(col, rawValue) {
+  const ovr  = state.validators[col.colId] || {};
+  const base = baseTypeOf(col.type);
+
+  // Vide ?
+  const isEmpty = rawValue === null || rawValue === undefined ||
+    (typeof rawValue === 'string' && rawValue.trim() === '') ||
+    (Array.isArray(rawValue) && rawValue.length === 0);
+
+  // Cas vide : pas d'envoi (Grist gardera vide). On laisse passer sauf si une regex/longueur exige du contenu.
+  if (isEmpty) {
+    // Si une longueur min > 0 ou une regex est définie comme override, on considère que le vide est invalide.
+    if (ovr.minLength && Number(ovr.minLength) > 0) {
+      return { value: null, error: `Longueur minimale : ${ovr.minLength}` };
+    }
+    if (ovr.regex && ovr.regex.trim() !== '') {
+      return { value: null, error: ovr.errorMsg || "Champ ne respectant pas le format requis" };
+    }
+    if (ovr.format && ovr.format !== 'none') {
+      return { value: null, error: ovr.errorMsg || (FORMAT_PRESETS[ovr.format]?.msg || "Format invalide") };
+    }
+    return { value: null, error: null };
+  }
+
+  // ── Validation par type Grist ────────────────────────────────────────────
+  let parsed = rawValue;
+
+  switch (base) {
+    case 'Numeric': {
+      const n = Number(String(rawValue).replace(',', '.'));
+      if (!Number.isFinite(n)) return { value: null, error: "Doit être un nombre" };
+      if (ovr.min !== undefined && ovr.min !== '' && n < Number(ovr.min))
+        return { value: null, error: `Doit être ≥ ${ovr.min}` };
+      if (ovr.max !== undefined && ovr.max !== '' && n > Number(ovr.max))
+        return { value: null, error: `Doit être ≤ ${ovr.max}` };
+      parsed = n;
+      break;
+    }
+    case 'Int': {
+      const n = Number(String(rawValue).replace(',', '.'));
+      if (!Number.isFinite(n) || !Number.isInteger(n))
+        return { value: null, error: "Doit être un entier" };
+      if (ovr.min !== undefined && ovr.min !== '' && n < Number(ovr.min))
+        return { value: null, error: `Doit être ≥ ${ovr.min}` };
+      if (ovr.max !== undefined && ovr.max !== '' && n > Number(ovr.max))
+        return { value: null, error: `Doit être ≤ ${ovr.max}` };
+      parsed = n;
+      break;
+    }
+    case 'Bool': {
+      parsed = !!rawValue;
+      break;
+    }
+    case 'Date': {
+      // rawValue est une chaîne YYYY-MM-DD ; Grist stocke un timestamp (s) UTC midi pour Date
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(rawValue));
+      if (!m) return { value: null, error: "Date invalide (format YYYY-MM-DD attendu)" };
+      const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+      if (isNaN(d.getTime())) return { value: null, error: "Date invalide" };
+      parsed = Math.floor(d.getTime() / 1000);
+      break;
+    }
+    case 'DateTime': {
+      // <input type="datetime-local"> renvoie YYYY-MM-DDTHH:MM
+      const d = new Date(rawValue);
+      if (isNaN(d.getTime())) return { value: null, error: "Date/heure invalide" };
+      parsed = Math.floor(d.getTime() / 1000);
+      break;
+    }
+    case 'Choice': {
+      const choices = col.choices || [];
+      if (choices.length && !choices.includes(rawValue))
+        return { value: null, error: "Valeur hors des choix autorisés" };
+      parsed = String(rawValue);
+      break;
+    }
+    case 'ChoiceList': {
+      // rawValue est un tableau ; Grist attend ["L", "v1", "v2", …]
+      const arr = Array.isArray(rawValue) ? rawValue : [];
+      const choices = col.choices || [];
+      if (choices.length) {
+        for (const v of arr) {
+          if (!choices.includes(v))
+            return { value: null, error: `Valeur "${v}" hors des choix autorisés` };
+        }
+      }
+      parsed = ['L', ...arr];
+      break;
+    }
+    case 'Text':
+    case 'Any':
+    default: {
+      parsed = String(rawValue);
+      break;
+    }
+  }
+
+  // ── Validation longueur (texte) ──────────────────────────────────────────
+  if (typeof parsed === 'string') {
+    if (ovr.minLength && parsed.length < Number(ovr.minLength))
+      return { value: null, error: `Longueur minimale : ${ovr.minLength}` };
+    if (ovr.maxLength && parsed.length > Number(ovr.maxLength))
+      return { value: null, error: `Longueur maximale : ${ovr.maxLength}` };
+  }
+
+  // ── Validation format prédéfini (email/tél/URL) ──────────────────────────
+  if (typeof parsed === 'string' && ovr.format && ovr.format !== 'none') {
+    const preset = FORMAT_PRESETS[ovr.format];
+    if (preset && preset.regex && !preset.regex.test(parsed))
+      return { value: null, error: ovr.errorMsg || preset.msg };
+  }
+
+  // ── Validation regex personnalisée (prioritaire si présente) ─────────────
+  if (typeof parsed === 'string' && ovr.regex && ovr.regex.trim() !== '') {
+    let re;
+    try { re = new RegExp(ovr.regex); }
+    catch (e) { return { value: null, error: "Regex invalide dans la configuration" }; }
+    if (!re.test(parsed))
+      return { value: null, error: ovr.errorMsg || "Ne respecte pas le format requis" };
+  }
+
+  return { value: parsed, error: null };
+}
+
+//
+// ─── Rendu du formulaire ───────────────────────────────────────────────────
+//
+function renderForm() {
+  const host = $('#form-host');
+  host.innerHTML = '';
+
+  if (!state.tableId) {
+    host.appendChild(el('div', { class: 'form-empty' }, [
+      "Aucune table associée à ce widget. Dans Grist, ouvrez la configuration du widget et choisissez la table dans laquelle insérer les lignes."
+    ]));
+    return;
+  }
+  if (state.columns.length === 0) {
+    host.appendChild(el('div', { class: 'form-empty' }, [
+      "Aucune colonne éditable trouvée dans la table « " + state.tableId + " »."
+    ]));
+    return;
+  }
+
+  const card = el('div', { class: 'form-card' });
+  const form = el('form', { id: 'form', autocomplete: 'off' });
+
+  for (const col of state.columns) {
+    form.appendChild(buildField(col));
+  }
+
+  const actions = el('div', { class: 'actions' }, [
+    el('button', { type: 'reset', class: 'btn' }, 'Réinitialiser'),
+    el('button', { type: 'submit', class: 'btn primary' }, 'Enregistrer la ligne'),
+  ]);
+  form.appendChild(actions);
+
+  form.addEventListener('submit', onSubmit);
+  form.addEventListener('reset', () => setTimeout(clearErrors, 0));
+
+  card.appendChild(form);
+  host.appendChild(card);
+}
+
+function buildField(col) {
+  const base = baseTypeOf(col.type);
+  const ovr  = state.validators[col.colId] || {};
+  const fid  = 'f-' + col.colId;
+  const wrap = el('div', { class: 'field', 'data-col': col.colId, 'data-type': base });
+
+  // Petit badge de type + indicateur de format
+  const fmtSuffix = ovr.format && ovr.format !== 'none' ? ` · ${ovr.format}` : '';
+  const meta = el('span', { class: 'meta' }, [`(${col.type}${fmtSuffix})`]);
+
+  let input;
+  if (base === 'Bool') {
+    input = el('input', { type: 'checkbox', id: fid });
+    const label = el('label', { for: fid }, [col.label, meta]);
+    const row = el('div', { class: 'field-checkbox' }, [input, label]);
+    wrap.appendChild(row);
+    wrap.appendChild(el('div', { class: 'error' }));
+    return wrap;
+  }
+
+  // Label commun
+  wrap.appendChild(el('label', { for: fid }, [col.label, meta]));
+
+  if (base === 'Choice' && col.choices) {
+    input = el('select', { id: fid, name: col.colId });
+    input.appendChild(el('option', { value: '' }, '— sélectionner —'));
+    for (const c of col.choices) input.appendChild(el('option', { value: c }, c));
+  }
+  else if (base === 'ChoiceList' && col.choices) {
+    input = el('select', { id: fid, name: col.colId, multiple: 'multiple', size: Math.min(col.choices.length, 5) });
+    for (const c of col.choices) input.appendChild(el('option', { value: c }, c));
+  }
+  else if (base === 'Date') {
+    input = el('input', { type: 'date', id: fid, name: col.colId });
+  }
+  else if (base === 'DateTime') {
+    input = el('input', { type: 'datetime-local', id: fid, name: col.colId });
+  }
+  else if (base === 'Numeric' || base === 'Int') {
+    input = el('input', {
+      type: 'number', id: fid, name: col.colId,
+      step: base === 'Int' ? '1' : 'any',
+      min: ovr.min ?? null,
+      max: ovr.max ?? null,
+    });
+  }
+  else if (ovr.format === 'email') {
+    input = el('input', { type: 'email', id: fid, name: col.colId });
+  }
+  else if (ovr.format === 'phone') {
+    input = el('input', { type: 'tel', id: fid, name: col.colId });
+  }
+  else if (ovr.format === 'url') {
+    input = el('input', { type: 'url', id: fid, name: col.colId });
+  }
+  else {
+    // Text / Any : si maxLength > 80 on passe en textarea, sinon input simple
+    if (ovr.maxLength && Number(ovr.maxLength) > 80) {
+      input = el('textarea', { id: fid, name: col.colId, maxlength: ovr.maxLength });
+    } else {
+      input = el('input', {
+        type: 'text', id: fid, name: col.colId,
+        maxlength: ovr.maxLength ?? null,
+      });
+    }
+  }
+
+  wrap.appendChild(input);
+  wrap.appendChild(el('div', { class: 'error' }));
+  return wrap;
+}
+
+function readField(col, fieldEl) {
+  const base = baseTypeOf(col.type);
+  if (base === 'Bool') return fieldEl.querySelector('input[type="checkbox"]').checked;
+  if (base === 'ChoiceList') {
+    const sel = fieldEl.querySelector('select');
+    return Array.from(sel.selectedOptions).map(o => o.value);
+  }
+  const inp = fieldEl.querySelector('input, select, textarea');
+  if (!inp) return null;
+  return inp.value;
+}
+
+function clearErrors() {
+  document.querySelectorAll('.field.has-error').forEach(f => {
+    f.classList.remove('has-error');
+    const err = f.querySelector('.error');
+    if (err) err.textContent = '';
+  });
+}
+
+function setFieldError(colId, msg) {
+  const f = document.querySelector(`.field[data-col="${CSS.escape(colId)}"]`);
+  if (!f) return;
+  f.classList.add('has-error');
+  const err = f.querySelector('.error');
+  if (err) err.textContent = msg;
+}
+
+async function onSubmit(ev) {
+  ev.preventDefault();
+  clearErrors();
+
+  const fields = {};
+  let firstErrorField = null;
+
+  for (const col of state.columns) {
+    const fieldEl = document.querySelector(`.field[data-col="${CSS.escape(col.colId)}"]`);
+    if (!fieldEl) continue;
+    const raw = readField(col, fieldEl);
+    const { value, error } = validateField(col, raw);
+    if (error) {
+      setFieldError(col.colId, error);
+      if (!firstErrorField) firstErrorField = fieldEl;
+      continue;
+    }
+    if (value !== null && value !== undefined && !(typeof value === 'string' && value === '')) {
+      fields[col.colId] = value;
+    }
+  }
+
+  if (firstErrorField) {
+    showToast("Le formulaire contient des erreurs", 'err');
+    firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  if (Object.keys(fields).length === 0) {
+    showToast("Aucune donnée à enregistrer", 'err');
+    return;
+  }
+
+  const submitBtn = ev.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  try {
+    await grist.selectedTable.create({ fields });
+    showToast("Ligne ajoutée ✓", 'ok');
+    ev.target.reset();
+    clearErrors();
+  } catch (e) {
+    console.error('[form-validator] échec de la création :', e);
+    showToast("Échec de l'enregistrement : " + (e.message || e), 'err');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+//
+// ─── Panneau de configuration ──────────────────────────────────────────────
+//
+function renderConfigPanel() {
+  const body = $('#config-body');
+  body.innerHTML = '';
+
+  if (state.columns.length === 0) {
+    body.appendChild(el('p', { class: 'hint' }, "Aucune colonne à configurer."));
+    return;
+  }
+
+  for (const col of state.columns) {
+    const ovr  = state.validators[col.colId] || {};
+    const base = baseTypeOf(col.type);
+    const card = el('div', { class: 'col-config', 'data-col': col.colId });
+
+    card.appendChild(el('div', { class: 'col-config-head' }, [
+      el('strong', {}, col.label + ' '),
+      el('span', { class: 'type-badge' }, col.type),
+    ]));
+
+    // Format prédéfini (pertinent surtout pour Text/Any)
+    if (base === 'Text' || base === 'Any') {
+      const row = el('div', { class: 'row' }, [
+        el('div', {}, [
+          el('label', {}, 'Format prédéfini'),
+          (() => {
+            const sel = el('select', { 'data-k': 'format' });
+            for (const f of ['none', 'email', 'phone', 'url']) {
+              const opt = el('option', { value: f }, f);
+              if ((ovr.format || 'none') === f) opt.selected = true;
+              sel.appendChild(opt);
+            }
+            return sel;
+          })(),
+        ]),
+        el('div', {}, [
+          el('label', {}, 'Message d\'erreur (optionnel)'),
+          el('input', { type: 'text', 'data-k': 'errorMsg', value: ovr.errorMsg || '' }),
+        ]),
+      ]);
+      card.appendChild(row);
+
+      card.appendChild(el('div', { class: 'row' }, [
+        el('div', { class: 'full' }, [
+          el('label', {}, 'Regex personnalisée (priorité sur le format)'),
+          el('input', { type: 'text', 'data-k': 'regex', value: ovr.regex || '', placeholder: 'ex. ^[A-Z]{2}\\d{4}$' }),
+        ]),
+      ]));
+
+      card.appendChild(el('div', { class: 'row' }, [
+        el('div', {}, [
+          el('label', {}, 'Longueur min'),
+          el('input', { type: 'number', 'data-k': 'minLength', value: ovr.minLength ?? '', min: '0' }),
+        ]),
+        el('div', {}, [
+          el('label', {}, 'Longueur max'),
+          el('input', { type: 'number', 'data-k': 'maxLength', value: ovr.maxLength ?? '', min: '0' }),
+        ]),
+      ]));
+    }
+    else if (base === 'Numeric' || base === 'Int') {
+      card.appendChild(el('div', { class: 'row' }, [
+        el('div', {}, [
+          el('label', {}, 'Valeur min'),
+          el('input', { type: 'number', 'data-k': 'min', value: ovr.min ?? '', step: 'any' }),
+        ]),
+        el('div', {}, [
+          el('label', {}, 'Valeur max'),
+          el('input', { type: 'number', 'data-k': 'max', value: ovr.max ?? '', step: 'any' }),
+        ]),
+      ]));
+      card.appendChild(el('div', { class: 'row' }, [
+        el('div', { class: 'full' }, [
+          el('label', {}, 'Message d\'erreur (optionnel)'),
+          el('input', { type: 'text', 'data-k': 'errorMsg', value: ovr.errorMsg || '' }),
+        ]),
+      ]));
+    }
+    else {
+      card.appendChild(el('div', { class: 'hint' },
+        "Validation automatique selon le type Grist. Pas de surcharge supplémentaire pour ce type."));
+    }
+
+    body.appendChild(card);
+  }
+}
+
+function readConfigPanel() {
+  const out = {};
+  document.querySelectorAll('#config-body .col-config').forEach(card => {
+    const colId = card.dataset.col;
+    const cfg = {};
+    card.querySelectorAll('[data-k]').forEach(input => {
+      const k = input.dataset.k;
+      const v = input.value;
+      if (v === '' || v === null || v === undefined) return;
+      cfg[k] = v;
+    });
+    if (Object.keys(cfg).length > 0) out[colId] = cfg;
+  });
+  return out;
+}
+
+async function saveConfig() {
+  state.validators = readConfigPanel();
+  try {
+    await grist.setOption('validators', state.validators);
+    showToast("Règles enregistrées ✓", 'ok');
+    renderForm();   // refresh des inputs (regex maxlength, etc.)
+    closeConfig();
+  } catch (e) {
+    console.error('[form-validator] setOption a échoué :', e);
+    showToast("Échec de l'enregistrement de la config", 'err');
+  }
+}
+
+function openConfig()  { renderConfigPanel(); $('#config-overlay').classList.add('open'); }
+function closeConfig() { $('#config-overlay').classList.remove('open'); }
+
+//
+// ─── Boot ──────────────────────────────────────────────────────────────────
+//
+async function boot() {
+  $('#btn-config').addEventListener('click', openConfig);
+  $('#btn-config-close').addEventListener('click', closeConfig);
+  $('#btn-config-save').addEventListener('click', saveConfig);
+  $('#btn-config-reset').addEventListener('click', () => {
+    state.validators = {};
+    renderConfigPanel();
+  });
+  $('#btn-refresh').addEventListener('click', refresh);
+
+  await grist.ready({ requiredAccess: 'full' });
+
+  // Récupère les options sauvegardées
+  grist.onOptions((opts) => {
+    state.validators = (opts && opts.validators) || {};
+    renderForm();
+  });
+
+  await refresh();
+}
+
+async function refresh() {
+  $('#topbar-sub').textContent = 'Chargement…';
+  try {
+    await loadSchema();
+    $('#topbar-sub').textContent = state.tableId
+      ? `Table : ${state.tableId} · ${state.columns.length} champ${state.columns.length > 1 ? 's' : ''}`
+      : "Aucune table associée";
+    renderForm();
+  } catch (e) {
+    console.error('[form-validator] erreur de chargement :', e);
+    $('#topbar-sub').textContent = "Erreur : " + (e.message || e);
+    $('#form-host').innerHTML = '';
+    $('#form-host').appendChild(el('div', { class: 'form-empty' }, [String(e.message || e)]));
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

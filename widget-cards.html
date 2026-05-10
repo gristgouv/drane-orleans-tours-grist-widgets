@@ -51,6 +51,8 @@
     }
     .btn-icon:hover { background: #edf2f7; }
     .topbar-right { display: flex; gap: 4px; align-items: center; }
+    .config-hint { font-size: 0.72rem; color: var(--muted, #64748b); font-style: italic; margin-right: 6px; white-space: nowrap; }
+    @media (max-width: 600px) { .config-hint { display: none; } }
 
     /* ── Toolbar (search + filters) ── */
     #toolbar {
@@ -430,7 +432,8 @@
     <span id="topbar-sub"></span>
   </div>
   <div class="topbar-right">
-    <button id="btn-config" class="btn-icon" title="Configuration">&#9881;</button>
+    <span class="config-hint">Cliquez sur &#9881; pour configurer</span>
+    <button id="btn-config" class="btn-icon" title="Cliquez ici pour configurer le widget">&#9881;</button>
   </div>
 </div>
 
