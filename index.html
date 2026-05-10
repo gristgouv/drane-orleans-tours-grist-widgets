@@ -214,7 +214,7 @@ const WIDGETS = [
   {
     name: 'Formulaire validé',
     file: 'form-validator.html',
-    desc: 'Formulaire de saisie qui valide les données avant insertion dans la table : détection automatique des types Grist (Text, Numeric, Int, Date, DateTime, Bool, Choice, ChoiceList) et surcharges par colonne configurables (regex personnalisée, formats prédéfinis email / téléphone / URL, valeurs min/max, longueurs min/max, message d\'erreur). Bonus : un bouton génère automatiquement une colonne formule Python qui rejoue les mêmes règles côté Grist — ainsi les lignes saisies via un formulaire Grist natif (visiteur non connecté) sont aussi marquées si invalides. Nécessite un accès « complet » au document.',
+    desc: 'Formulaire de saisie qui valide les données avant insertion dans la table : détection automatique des types Grist (Text, Numeric, Int, Date, DateTime, Bool, Choice, ChoiceList) et surcharges par colonne configurables (regex personnalisée, formats prédéfinis email / téléphone / URL, valeurs min/max, longueurs min/max, message d\'erreur). Trois usages possibles : (1) saisie validée par un éditeur Grist connecté ; (2) génération d\'une colonne formule Python qui rejoue les mêmes règles côté Grist (utile en complément d\'un formulaire Grist natif) ; (3) génération d\'un « lien public » autonome — le widget s\'ouvre hors de Grist et soumet directement via l\'API REST, sans login (nécessite des Access Rules permettant l\'INSERT anonyme sur la table). Nécessite un accès « complet » au document.',
   },
 ];
 
