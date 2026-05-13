@@ -760,25 +760,60 @@ async function loadRefOptions(targetTableId, visibleColId, filterExpr) {
 //
 // ─── Filtre des valeurs de référence (DSL "choice.col <op> <valeur>") ──────
 //
+// Fonctions reconnues dans les filtres et les conditions showIf.
+// Appliquées sur la valeur du champ avant l'opérateur de comparaison.
+const FILTER_FUNCS = {
+  len: (v) => {
+    if (v == null) return 0;
+    if (typeof v === 'string') return v.length;
+    if (Array.isArray(v)) return v[0] === 'L' ? v.length - 1 : v.length;
+    return String(v).length;
+  },
+  lower: (v) => v == null ? '' : String(v).toLowerCase(),
+  upper: (v) => v == null ? '' : String(v).toUpperCase(),
+  trim:  (v) => v == null ? '' : String(v).trim(),
+};
+
+function parseFilterClause(line, namespace) {
+  // Accepte deux formes :
+  //   <namespace>.colName <op> <valeur>
+  //   fn(<namespace>.colName) <op> <valeur>
+  const reFn   = new RegExp(`^(\\w+)\\(\\s*${namespace}\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\)\\s*(==|!=|<=|>=|<|>)\\s*(.+)$`);
+  const reBare = new RegExp(`^${namespace}\\.([A-Za-z_][A-Za-z0-9_]*)\\s*(==|!=|<=|>=|<|>)\\s*(.+)$`);
+  let fn = null, colName, op, rawValue;
+  let m = reFn.exec(line);
+  if (m) { [, fn, colName, op, rawValue] = m; }
+  else {
+    m = reBare.exec(line);
+    if (m) { [, colName, op, rawValue] = m; }
+  }
+  if (!m) return null;
+  if (fn) {
+    fn = fn.toLowerCase();
+    if (!FILTER_FUNCS[fn]) return { _error: `fonction inconnue : ${fn}` };
+  }
+  let value;
+  try { value = parseFilterLiteral(rawValue.trim()); }
+  catch (e) { return { _error: 'littéral invalide : ' + rawValue }; }
+  return { fn, colName, op, value };
+}
+
 function parseRefFilter(expr) {
   if (!expr || typeof expr !== 'string') return [];
   const out = [];
   for (let line of expr.split(/\r?\n/)) {
     line = line.trim();
     if (!line || line.startsWith('#')) continue;
-    const m = /^choice\.([A-Za-z_][A-Za-z0-9_]*)\s*(==|!=|<=|>=|<|>)\s*(.+)$/.exec(line);
-    if (!m) {
+    const p = parseFilterClause(line, 'choice');
+    if (!p) {
       console.warn('[form-validator] refFilter: ligne ignorée (syntaxe invalide) :', line);
       continue;
     }
-    const [, colName, op, rawValue] = m;
-    let value;
-    try { value = parseFilterLiteral(rawValue.trim()); }
-    catch (e) {
-      console.warn('[form-validator] refFilter: littéral invalide :', rawValue);
+    if (p._error) {
+      console.warn('[form-validator] refFilter:', p._error, '—', line);
       continue;
     }
-    out.push({ colName, op, value });
+    out.push(p);
   }
   return out;
 }
@@ -801,7 +836,8 @@ function parseFilterLiteral(s) {
 function evalRefPredicate(tbl, i, pred) {
   const arr = tbl[pred.colName];
   if (!arr) return false;
-  const v = arr[i];
+  let v = arr[i];
+  if (pred.fn) v = FILTER_FUNCS[pred.fn](v);
   switch (pred.op) {
     case '==': return refValueEq(v, pred.value);
     case '!=': return !refValueEq(v, pred.value);
@@ -843,25 +879,23 @@ function parseShowIfFilter(expr) {
   for (let line of expr.split(/\r?\n/)) {
     line = line.trim();
     if (!line || line.startsWith('#')) continue;
-    const m = /^form\.([A-Za-z_][A-Za-z0-9_]*)\s*(==|!=|<=|>=|<|>)\s*(.+)$/.exec(line);
-    if (!m) {
+    const p = parseFilterClause(line, 'form');
+    if (!p) {
       console.warn('[form-validator] showIf: ligne ignorée (syntaxe invalide) :', line);
       continue;
     }
-    const [, colName, op, rawValue] = m;
-    let value;
-    try { value = parseFilterLiteral(rawValue.trim()); }
-    catch (e) {
-      console.warn('[form-validator] showIf: littéral invalide :', rawValue);
+    if (p._error) {
+      console.warn('[form-validator] showIf:', p._error, '—', line);
       continue;
     }
-    out.push({ colName, op, value });
+    out.push(p);
   }
   return out;
 }
 
 function evalFormPredicate(formValues, pred) {
-  const v = formValues[pred.colName];
+  let v = formValues[pred.colName];
+  if (pred.fn) v = FILTER_FUNCS[pred.fn](v);
   switch (pred.op) {
     case '==': return refValueEq(v, pred.value);
     case '!=': return !refValueEq(v, pred.value);
@@ -1833,7 +1867,7 @@ function renderConfigPanel() {
     // Logique conditionnelle : afficher ce champ uniquement si …
     const showIfTa = el('textarea', {
       'data-k': 'showIf', rows: '3',
-      placeholder: "Vide = toujours afficher. Ex :\nform.Type == 'Particulier'\nform.Age >= 18",
+      placeholder: "Vide = toujours afficher. Ex :\nform.Type == 'Particulier'\nlen(form.Mail) > 1",
     });
     showIfTa.value = ovr.showIf || '';
     card.appendChild(el('div', { class: 'row' }, [
@@ -1841,7 +1875,8 @@ function renderConfigPanel() {
         el('label', {}, 'Afficher uniquement si (logique conditionnelle)'),
         showIfTa,
         el('div', { class: 'hint' },
-          "Syntaxe : form.<colonne> <op> <valeur>. Opérateurs : == != < <= > >=. " +
+          "Syntaxe : form.<colonne> <op> <valeur> — ou fn(form.<colonne>) <op> <valeur>. " +
+          "Opérateurs : == != < <= > >=. Fonctions : len, lower, upper, trim. " +
           "Valeurs : 'texte', \"texte\", nombre, true / false / null. " +
           "Une condition par ligne (ET logique). Vide = toujours afficher."),
       ]),
@@ -1883,7 +1918,8 @@ function renderConfigPanel() {
           el('label', {}, 'Filtre des valeurs proposées'),
           filterTa,
           el('div', { class: 'hint' },
-            "Syntaxe : choice.<colonne> <op> <valeur>. Opérateurs : == != < <= > >=. " +
+            "Syntaxe : choice.<colonne> <op> <valeur> — ou fn(choice.<colonne>) <op> <valeur>. " +
+            "Opérateurs : == != < <= > >=. Fonctions : len, lower, upper, trim. " +
             "Valeurs : 'texte', \"texte\", nombre, true / false / null. " +
             "Une condition par ligne (ET logique). Ligne commençant par # = commentaire."),
         ]),
