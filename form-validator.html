@@ -195,6 +195,74 @@
       padding: 4px 0;
     }
 
+    /* Auto-complétion (Choice/ChoiceList/Ref/RefList en mode "autocomplete") */
+    .field-ac { position: relative; }
+    .field-ac-input-wrap {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      align-items: center;
+      border: 1.5px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface);
+      padding: 4px 6px;
+      min-height: 38px;
+    }
+    .field-ac-input-wrap:focus-within { border-color: var(--accent); }
+    .field-ac-chips { display: contents; }
+    .field-ac-chip {
+      display: inline-flex; align-items: center; gap: 2px;
+      background: var(--aclt); color: var(--accent);
+      padding: 2px 4px 2px 10px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      max-width: 100%;
+    }
+    .field-ac-chip span {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      max-width: 240px;
+    }
+    .field-ac-chip button {
+      background: none; border: none; cursor: pointer;
+      color: var(--accent); padding: 0 6px;
+      font-size: 1rem; line-height: 1;
+    }
+    .field .field-ac-text {
+      flex: 1; min-width: 140px;
+      border: none; outline: none;
+      padding: 4px 6px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      background: transparent;
+      color: var(--text);
+      width: auto;
+    }
+    .field-ac-list {
+      display: none;
+      position: absolute;
+      top: 100%; left: 0; right: 0;
+      z-index: 20;
+      margin-top: 2px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .field-ac-item {
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 0.88rem;
+      line-height: 1.35;
+    }
+    .field-ac-item:hover,
+    .field-ac-item.active { background: var(--aclt); color: var(--accent); }
+    .field-ac-empty {
+      padding: 6px 10px;
+      color: var(--muted);
+      font-style: italic;
+      font-size: 0.85rem;
+    }
+
     .multi-tags {
       display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;
     }
@@ -993,7 +1061,13 @@ function renderForm() {
   form.appendChild(actions);
 
   form.addEventListener('submit', onSubmit);
-  form.addEventListener('reset', () => setTimeout(clearErrors, 0));
+  form.addEventListener('reset', () => setTimeout(() => {
+    clearErrors();
+    // Le reset HTML natif ne touche pas aux états internes des widgets d'auto-complétion
+    document.querySelectorAll('.field-ac').forEach(ac => {
+      if (typeof ac._reset === 'function') ac._reset();
+    });
+  }, 0));
 
   card.appendChild(form);
   host.appendChild(card);
@@ -1031,8 +1105,12 @@ function buildField(col) {
   const isMultiField  = base === 'ChoiceList' || base === 'RefList';
   const useRadio    = isOptionField && !isMultiField && widgetPref === 'radio';
   const useCheckbox = isOptionField &&  isMultiField && widgetPref === 'checkbox';
+  const useAutocomplete = isOptionField && widgetPref === 'autocomplete';
 
-  if (useRadio || useCheckbox) {
+  if (useAutocomplete) {
+    input = buildAutocomplete(col, fid, isMultiField, getFieldOptions(col));
+  }
+  else if (useRadio || useCheckbox) {
     input = buildOptionGroup(col, fid, useRadio ? 'radio' : 'checkbox', getFieldOptions(col));
   }
   else if (base === 'Choice' && col.choices) {
@@ -1145,10 +1223,188 @@ function buildOptionGroup(col, fid, inputType, options) {
   return group;
 }
 
+function buildAutocomplete(col, fid, isMulti, options) {
+  const wrap = el('div', {
+    class: 'field-ac' + (isMulti ? ' field-ac-multi' : ''),
+  });
+  const inputWrap = el('div', { class: 'field-ac-input-wrap' });
+  const chipsBox  = isMulti ? el('div', { class: 'field-ac-chips' }) : null;
+  if (chipsBox) inputWrap.appendChild(chipsBox);
+
+  const txt = el('input', {
+    type: 'text',
+    id: fid,
+    class: 'field-ac-text',
+    autocomplete: 'off',
+    placeholder: options.length === 0
+      ? 'Aucune valeur disponible'
+      : (isMulti ? 'Tapez pour rechercher…' : 'Tapez ou cliquez pour rechercher…'),
+  });
+  inputWrap.appendChild(txt);
+  wrap.appendChild(inputWrap);
+
+  // En mode simple, on stocke l'ID sélectionné dans un input hidden
+  const hidden = isMulti ? null : el('input', { type: 'hidden', class: 'field-ac-id' });
+  if (hidden) wrap.appendChild(hidden);
+
+  const list = el('div', { class: 'field-ac-list' });
+  wrap.appendChild(list);
+
+  const selectedIds = [];  // pour le mode multi (ordre préservé)
+  let activeIdx = -1;
+
+  function renderChips() {
+    if (!chipsBox) return;
+    chipsBox.innerHTML = '';
+    for (const id of selectedIds) {
+      const opt = options.find(o => o.value === id);
+      const lbl = opt ? opt.label : id;
+      const chip = el('span', { class: 'field-ac-chip', 'data-id': id });
+      chip.appendChild(el('span', {}, lbl));
+      const rm = el('button', { type: 'button', title: 'Retirer' }, '×');
+      rm.addEventListener('click', () => {
+        const i = selectedIds.indexOf(id);
+        if (i >= 0) selectedIds.splice(i, 1);
+        renderChips();
+        updateList();
+        txt.focus();
+      });
+      chip.appendChild(rm);
+      chipsBox.appendChild(chip);
+    }
+  }
+
+  function selectSingle(opt) {
+    txt.value = opt.label;
+    if (hidden) hidden.value = opt.value;
+    list.style.display = 'none';
+    activeIdx = -1;
+  }
+
+  function addMulti(opt) {
+    if (selectedIds.includes(opt.value)) return;
+    selectedIds.push(opt.value);
+    txt.value = '';
+    renderChips();
+    updateList();
+  }
+
+  function updateList() {
+    const q = txt.value.toLowerCase().trim();
+    const filtered = options.filter(o => {
+      if (isMulti && selectedIds.includes(o.value)) return false;
+      if (!q) return true;
+      return o.label.toLowerCase().includes(q);
+    });
+    list.innerHTML = '';
+    if (options.length === 0) {
+      list.style.display = 'none';
+      return;
+    }
+    if (filtered.length === 0) {
+      list.style.display = 'block';
+      list.appendChild(el('div', { class: 'field-ac-empty' }, 'Aucun résultat'));
+      activeIdx = -1;
+      return;
+    }
+    filtered.slice(0, 100).forEach((opt) => {
+      const item = el('div', { class: 'field-ac-item', 'data-id': opt.value }, opt.label);
+      // mousedown pour devancer le blur du champ texte
+      item.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        if (isMulti) addMulti(opt);
+        else selectSingle(opt);
+      });
+      list.appendChild(item);
+    });
+    list.style.display = 'block';
+    activeIdx = -1;
+  }
+
+  function setActive(idx) {
+    const items = list.querySelectorAll('.field-ac-item');
+    items.forEach(it => it.classList.remove('active'));
+    if (idx >= 0 && idx < items.length) {
+      items[idx].classList.add('active');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    }
+    activeIdx = idx;
+  }
+
+  txt.addEventListener('input', updateList);
+  txt.addEventListener('focus', updateList);
+  txt.addEventListener('keydown', (ev) => {
+    const items = list.querySelectorAll('.field-ac-item');
+    if (ev.key === 'ArrowDown') {
+      ev.preventDefault();
+      if (list.style.display === 'none') updateList();
+      setActive(Math.min(activeIdx + 1, items.length - 1));
+    } else if (ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      setActive(Math.max(activeIdx - 1, 0));
+    } else if (ev.key === 'Enter') {
+      if (activeIdx >= 0 && activeIdx < items.length) {
+        ev.preventDefault();
+        const opt = options.find(o => o.value === items[activeIdx].dataset.id);
+        if (opt) { isMulti ? addMulti(opt) : selectSingle(opt); }
+      }
+    } else if (ev.key === 'Escape') {
+      list.style.display = 'none';
+    } else if (ev.key === 'Backspace' && isMulti && txt.value === '' && selectedIds.length > 0) {
+      selectedIds.pop();
+      renderChips();
+      updateList();
+    }
+  });
+
+  // Au blur : on cache la liste et, en mode simple, on rétablit le label
+  // correspondant à la sélection (sinon on vide l'input si rien ne correspond).
+  txt.addEventListener('blur', () => {
+    setTimeout(() => { list.style.display = 'none'; }, 150);
+    if (!isMulti && hidden) {
+      const direct = options.find(o => o.label.toLowerCase() === txt.value.toLowerCase());
+      if (direct) {
+        txt.value = direct.label;
+        hidden.value = direct.value;
+      } else if (!txt.value) {
+        hidden.value = '';
+      } else if (hidden.value) {
+        const prev = options.find(o => o.value === hidden.value);
+        if (prev) txt.value = prev.label;
+      } else {
+        txt.value = '';
+      }
+    }
+  });
+
+  // Reset propre quand le formulaire est réinitialisé
+  wrap._reset = () => {
+    selectedIds.length = 0;
+    txt.value = '';
+    if (hidden) hidden.value = '';
+    renderChips();
+    list.style.display = 'none';
+    activeIdx = -1;
+  };
+
+  return wrap;
+}
+
 function readField(col, fieldEl) {
   const base = baseTypeOf(col.type);
   const ovr  = state.validators[col.colId] || {};
   if (base === 'Bool') return fieldEl.querySelector('input[type="checkbox"]').checked;
+
+  // Auto-complétion (Choice/ChoiceList/Ref/RefList en mode "autocomplete")
+  if (ovr.widget === 'autocomplete' &&
+      (base === 'Choice' || base === 'Ref' || base === 'ChoiceList' || base === 'RefList')) {
+    if (base === 'ChoiceList' || base === 'RefList') {
+      return Array.from(fieldEl.querySelectorAll('.field-ac-chip[data-id]'))
+        .map(c => c.dataset.id);
+    }
+    const hidden = fieldEl.querySelector('.field-ac-id');
+    return hidden ? hidden.value : '';
+  }
 
   // Boutons radio (Choice / Ref en mode "radio")
   if (ovr.widget === 'radio' && (base === 'Choice' || base === 'Ref')) {
@@ -1474,8 +1730,10 @@ function renderConfigPanel() {
     if (base === 'Choice' || base === 'Ref' || base === 'ChoiceList' || base === 'RefList') {
       const isMulti = (base === 'ChoiceList' || base === 'RefList');
       const choices = isMulti
-        ? [['select', 'Menu déroulant (multi)'], ['checkbox', 'Cases à cocher']]
-        : [['select', 'Menu déroulant'],          ['radio',    'Boutons radio']];
+        ? [['select', 'Menu déroulant (multi)'], ['checkbox', 'Cases à cocher'],
+           ['autocomplete', 'Auto-complétion (recherche + sélection multiple)']]
+        : [['select', 'Menu déroulant'],          ['radio',    'Boutons radio'],
+           ['autocomplete', 'Auto-complétion (tapez le début pour filtrer)']];
       card.appendChild(el('div', { class: 'row' }, [
         el('div', { class: 'full' }, [
           el('label', {}, 'Apparence du champ'),
