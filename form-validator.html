@@ -469,7 +469,8 @@ const state = {
   ready:     false,
   tableId:   null,
   columns:   [],          // [{ colId, label, type, isFormula, formula, widgetOptions, choices }]
-  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength } }
+  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique } }
+  uniqueGroups: [],       // contraintes d'unicité composite : [["Nom","Prenom"], ["Email","Tel"]]
   validationColumnName: 'Validation',
   // Mode public / standalone (formulaire ouvert hors de Grist)
   server:    null,        // ex. "https://grist.exemple.fr"
@@ -868,6 +869,21 @@ async function onSubmit(ev) {
   const submitBtn = ev.target.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
   try {
+    // Contrôle d'unicité (par colonne + composites)
+    const uniqueErrors = await checkUniqueness(fields);
+    if (Object.keys(uniqueErrors).length > 0) {
+      let firstErr = null;
+      for (const [colId, msg] of Object.entries(uniqueErrors)) {
+        setFieldError(colId, msg);
+        if (!firstErr) {
+          firstErr = document.querySelector(`.field[data-col="${CSS.escape(colId)}"]`);
+        }
+      }
+      showToast("Doublon détecté", 'err');
+      if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
     if (STANDALONE) {
       await submitStandalone(fields);
       showStandaloneSuccess();
@@ -883,6 +899,116 @@ async function onSubmit(ev) {
   } finally {
     submitBtn.disabled = false;
   }
+}
+
+//
+// ─── Vérification d'unicité ────────────────────────────────────────────────
+//
+function valuesEqual(a, b) {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!valuesEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (typeof a === 'number' || typeof b === 'number') {
+    const na = Number(a), nb = Number(b);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na === nb;
+  }
+  return String(a) === String(b);
+}
+
+async function fetchExistingRows() {
+  if (!state.tableId) throw new Error("Aucune table associée");
+  if (STANDALONE) {
+    if (!state.server || !state.docId) throw new Error("Configuration du lien incomplète");
+    const url = `${state.server}/api/docs/${state.docId}/tables/${state.tableId}/records`;
+    const resp = await fetch(url, { credentials: 'omit' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    // Convertit le format records:[{id,fields:{...}}] → format colonne {id:[…], colId:[…]}
+    const out = { id: [] };
+    for (const rec of data.records || []) {
+      out.id.push(rec.id);
+      for (const [k, v] of Object.entries(rec.fields || {})) {
+        if (!out[k]) out[k] = new Array(out.id.length - 1).fill(null);
+        out[k].push(v);
+      }
+      // Aligne toutes les colonnes connues
+      for (const k of Object.keys(out)) {
+        if (k === 'id') continue;
+        while (out[k].length < out.id.length) out[k].push(null);
+      }
+    }
+    return out;
+  }
+  return await grist.docApi.fetchTable(state.tableId);
+}
+
+async function checkUniqueness(fields) {
+  const errors = {};
+
+  const uniqueCols = state.columns
+    .filter(c => state.validators[c.colId] && state.validators[c.colId].unique)
+    .map(c => c.colId)
+    .filter(colId => colId in fields);
+
+  const groups = (state.uniqueGroups || []).filter(g =>
+    Array.isArray(g) && g.length >= 2 && g.every(c => c in fields));
+
+  if (uniqueCols.length === 0 && groups.length === 0) return errors;
+
+  let table;
+  try {
+    table = await fetchExistingRows();
+  } catch (e) {
+    console.warn('[form-validator] Contrôle d\'unicité ignoré (lecture impossible) :', e);
+    return errors;
+  }
+
+  const rowCount = table.id ? table.id.length : 0;
+  if (rowCount === 0) return errors;
+
+  // Unicité par colonne
+  for (const colId of uniqueCols) {
+    const colData = table[colId];
+    if (!colData) continue;
+    const target = fields[colId];
+    for (let i = 0; i < rowCount; i++) {
+      if (valuesEqual(colData[i], target)) {
+        errors[colId] = "Cette valeur existe déjà dans la table";
+        break;
+      }
+    }
+  }
+
+  // Unicité composite
+  for (const group of groups) {
+    if (!group.every(c => table[c])) continue;
+    let dup = false;
+    for (let i = 0; i < rowCount; i++) {
+      let match = true;
+      for (const c of group) {
+        if (!valuesEqual(table[c][i], fields[c])) { match = false; break; }
+      }
+      if (match) { dup = true; break; }
+    }
+    if (dup) {
+      const labels = group.map(c => {
+        const col = state.columns.find(x => x.colId === c);
+        return col ? (col.label || c) : c;
+      }).join(' + ');
+      for (const c of group) {
+        if (!errors[c]) errors[c] = `Doublon : la combinaison (${labels}) existe déjà`;
+      }
+    }
+  }
+
+  return errors;
 }
 
 //
@@ -1016,11 +1142,121 @@ function renderConfigPanel() {
         "Validation automatique selon le type Grist. Pas de surcharge supplémentaire pour ce type."));
     }
 
+    // Case "Interdire les doublons" — disponible pour tous les types
+    const uniqWrap = el('div', {
+      style: 'margin-top:10px; padding-top:8px; border-top:1px dashed var(--border); ' +
+             'display:flex; align-items:center; gap:6px;'
+    });
+    const uniqCb = el('input', { type: 'checkbox', 'data-k': 'unique', id: 'unq-' + col.colId });
+    uniqCb.checked = !!ovr.unique;
+    const uniqLbl = el('label', {
+      for: 'unq-' + col.colId,
+      style: 'cursor:pointer; font-size:0.78rem; color:var(--text); margin:0; ' +
+             'text-transform:none; letter-spacing:0; font-weight:500;'
+    }, 'Interdire les doublons (valeur unique dans la table)');
+    uniqWrap.appendChild(uniqCb);
+    uniqWrap.appendChild(uniqLbl);
+    card.appendChild(uniqWrap);
+
     body.appendChild(card);
   }
 
+  renderUniqueGroupsSection(body);
   renderValidationColumnSection(body);
   renderPublicLinkSection(body);
+}
+
+function renderUniqueGroupsSection(body) {
+  body.appendChild(el('div', { class: 'config-section-title' },
+    "Contraintes d'unicité composite"));
+
+  const desc = el('div', { class: 'section-desc' });
+  desc.innerHTML =
+    "Combinaisons de colonnes qui doivent être uniques <strong>ensemble</strong>. " +
+    "Une ligne sera rejetée si une autre possède exactement les mêmes valeurs sur " +
+    "<em>toutes</em> les colonnes du groupe (différent de cocher chaque colonne en « unique » individuellement). " +
+    "Vérification effectuée à la soumission via une lecture de la table.";
+  body.appendChild(desc);
+
+  const listEl = el('div', { id: 'unique-groups-list', style: 'margin-bottom:8px;' });
+  body.appendChild(listEl);
+  renderUniqueGroupsList(listEl);
+
+  const formWrap = el('div', {
+    style: 'border:1px dashed var(--border); padding:10px; border-radius:6px;'
+  });
+  formWrap.appendChild(el('label', {
+    style: 'display:block; font-size:0.72rem; color:var(--muted); margin-bottom:4px; ' +
+           'font-weight:600; text-transform:uppercase; letter-spacing:0.3px;'
+  }, "Nouvelle contrainte (Ctrl+clic pour sélectionner 2 colonnes ou plus)"));
+
+  const select = el('select', {
+    id: 'new-group-cols', multiple: 'multiple',
+    size: Math.min(Math.max(state.columns.length, 3), 6),
+    style: 'width:100%; padding:6px 8px; border:1px solid var(--border); ' +
+           'border-radius:5px; font-size:0.82rem; font-family:inherit;'
+  });
+  for (const col of state.columns) {
+    select.appendChild(el('option', { value: col.colId }, col.label || col.colId));
+  }
+  formWrap.appendChild(select);
+
+  const addBtn = el('button', {
+    type: 'button', class: 'btn small',
+    style: 'margin-top:6px;'
+  }, 'Ajouter cette contrainte');
+  addBtn.addEventListener('click', () => {
+    const selected = Array.from(select.selectedOptions).map(o => o.value);
+    if (selected.length < 2) {
+      showToast("Sélectionnez au moins 2 colonnes", 'err');
+      return;
+    }
+    const key = JSON.stringify([...selected].sort());
+    const exists = (state.uniqueGroups || []).some(g => JSON.stringify([...g].sort()) === key);
+    if (exists) {
+      showToast("Cette combinaison existe déjà", 'err');
+      return;
+    }
+    state.uniqueGroups = [...(state.uniqueGroups || []), selected];
+    renderUniqueGroupsList(listEl);
+    select.selectedIndex = -1;
+  });
+  formWrap.appendChild(addBtn);
+  body.appendChild(formWrap);
+}
+
+function renderUniqueGroupsList(container) {
+  container.innerHTML = '';
+  const groups = state.uniqueGroups || [];
+  if (groups.length === 0) {
+    container.appendChild(el('div', { class: 'hint', style: 'margin-bottom:0;' },
+      "Aucune contrainte composite définie."));
+    return;
+  }
+  groups.forEach((group, idx) => {
+    const row = el('div', {
+      style: 'display:flex; align-items:center; gap:6px; padding:8px 10px; ' +
+             'border:1px solid var(--border); border-radius:6px; margin-bottom:6px; flex-wrap:wrap;'
+    });
+    group.forEach((colId, i) => {
+      const col = state.columns.find(c => c.colId === colId);
+      const lbl = col ? (col.label || col.colId) : colId;
+      row.appendChild(el('span', { class: 'multi-tag' }, lbl));
+      if (i < group.length - 1) {
+        row.appendChild(el('span', { style: 'color:var(--muted); font-size:0.85rem;' }, '+'));
+      }
+    });
+    const rmBtn = el('button', {
+      type: 'button', class: 'btn-icon',
+      style: 'margin-left:auto; padding:2px 6px;', title: 'Supprimer'
+    }, '✕');
+    rmBtn.addEventListener('click', () => {
+      state.uniqueGroups = state.uniqueGroups.filter((_, i) => i !== idx);
+      renderUniqueGroupsList(container);
+    });
+    row.appendChild(rmBtn);
+    container.appendChild(row);
+  });
 }
 
 function renderPublicLinkSection(body) {
@@ -1138,6 +1374,7 @@ async function onGeneratePublicLink(ev) {
   // Persiste la config (sans bloquer la génération du lien si setOption échoue)
   try {
     await grist.setOption('validators',        state.validators);
+    await grist.setOption('uniqueGroups',      state.uniqueGroups || []);
     await grist.setOption('standaloneTitle',   state.standaloneTitle);
     await grist.setOption('standaloneSuccess', state.standaloneSuccess);
     await grist.setOption('docUrl',            state.docUrl);
@@ -1151,7 +1388,8 @@ async function onGeneratePublicLink(ev) {
     columns: state.columns.map(c => ({
       colId: c.colId, label: c.label, type: c.type, choices: c.choices,
     })),
-    validators: state.validators,
+    validators:   state.validators,
+    uniqueGroups: state.uniqueGroups || [],
   };
   const cfgB64 = encodeStandaloneCfg(cfg);
   const pageUrl = window.location.href.split('#')[0].split('?')[0];
@@ -1209,6 +1447,10 @@ function readConfigPanel() {
     const cfg = {};
     card.querySelectorAll('[data-k]').forEach(input => {
       const k = input.dataset.k;
+      if (input.type === 'checkbox') {
+        if (input.checked) cfg[k] = true;
+        return;
+      }
       const v = input.value;
       if (v === '' || v === null || v === undefined) return;
       cfg[k] = v;
@@ -1224,6 +1466,7 @@ async function saveConfig() {
   if (colNameInput) state.validationColumnName = (colNameInput.value || 'Validation').trim();
   try {
     await grist.setOption('validators', state.validators);
+    await grist.setOption('uniqueGroups', state.uniqueGroups || []);
     await grist.setOption('validationColumnName', state.validationColumnName);
     showToast("Règles enregistrées ✓", 'ok');
     renderForm();   // refresh des inputs (regex maxlength, etc.)
@@ -1438,6 +1681,7 @@ async function bootGrist() {
   $('#btn-config-save').addEventListener('click', saveConfig);
   $('#btn-config-reset').addEventListener('click', () => {
     state.validators = {};
+    state.uniqueGroups = [];
     renderConfigPanel();
   });
   $('#btn-refresh').addEventListener('click', refresh);
@@ -1447,6 +1691,7 @@ async function bootGrist() {
   // Récupère les options sauvegardées
   grist.onOptions((opts) => {
     state.validators = (opts && opts.validators) || {};
+    state.uniqueGroups = (opts && Array.isArray(opts.uniqueGroups)) ? opts.uniqueGroups : [];
     state.validationColumnName = (opts && opts.validationColumnName) || 'Validation';
     state.standaloneTitle      = (opts && opts.standaloneTitle)   || 'Formulaire';
     state.standaloneSuccess    = (opts && opts.standaloneSuccess) || 'Merci, votre réponse a été enregistrée.';
@@ -1481,6 +1726,7 @@ async function bootStandalone() {
     state.tableId            = cfg.tableId;
     state.columns            = cfg.columns || [];
     state.validators         = cfg.validators || {};
+    state.uniqueGroups       = Array.isArray(cfg.uniqueGroups) ? cfg.uniqueGroups : [];
     state.standaloneTitle    = cfg.title || 'Formulaire';
     state.standaloneSuccess  = cfg.successMessage || 'Merci, votre réponse a été enregistrée.';
 
