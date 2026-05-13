@@ -128,6 +128,7 @@
       border-color: var(--bad);
       background: var(--bad-bg);
     }
+    .field-hidden { display: none !important; }
     .field .error {
       display: none;
       font-size: 0.75rem;
@@ -610,7 +611,7 @@ const state = {
   ready:     false,
   tableId:   null,
   columns:   [],          // [{ colId, label, type, isFormula, formula, widgetOptions, choices }]
-  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique, customLabel, description, widget, refFilter, required } }
+  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique, customLabel, description, widget, refFilter, required, showIf } }
   uniqueGroups: [],       // contraintes d'unicité composite : [["Nom","Prenom"], ["Email","Tel"]]
   textBlocks: [],         // blocs de texte libres dans le formulaire : [{ content, position }]
   fieldOrder: [],         // ordre d'affichage des champs (liste de colId) ; vide = ordre naturel
@@ -831,6 +832,87 @@ function refValueCmp(a, b) {
   const na = Number(a), nb = Number(b);
   if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
   return String(a).localeCompare(String(b));
+}
+
+//
+// ─── Logique conditionnelle (afficher si …) ────────────────────────────────
+//
+function parseShowIfFilter(expr) {
+  if (!expr || typeof expr !== 'string') return [];
+  const out = [];
+  for (let line of expr.split(/\r?\n/)) {
+    line = line.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = /^form\.([A-Za-z_][A-Za-z0-9_]*)\s*(==|!=|<=|>=|<|>)\s*(.+)$/.exec(line);
+    if (!m) {
+      console.warn('[form-validator] showIf: ligne ignorée (syntaxe invalide) :', line);
+      continue;
+    }
+    const [, colName, op, rawValue] = m;
+    let value;
+    try { value = parseFilterLiteral(rawValue.trim()); }
+    catch (e) {
+      console.warn('[form-validator] showIf: littéral invalide :', rawValue);
+      continue;
+    }
+    out.push({ colName, op, value });
+  }
+  return out;
+}
+
+function evalFormPredicate(formValues, pred) {
+  const v = formValues[pred.colName];
+  switch (pred.op) {
+    case '==': return refValueEq(v, pred.value);
+    case '!=': return !refValueEq(v, pred.value);
+    case '<':  return refValueCmp(v, pred.value) <  0;
+    case '<=': return refValueCmp(v, pred.value) <= 0;
+    case '>':  return refValueCmp(v, pred.value) >  0;
+    case '>=': return refValueCmp(v, pred.value) >= 0;
+  }
+  return false;
+}
+
+function getFormValuesForConditions() {
+  const values = {};
+  for (const col of state.columns) {
+    const fieldEl = document.querySelector(`.field[data-col="${CSS.escape(col.colId)}"]`);
+    if (!fieldEl) continue;
+    // Les champs masqués ne contribuent pas (équivalent "aucune réponse")
+    if (fieldEl.classList.contains('field-hidden')) continue;
+    values[col.colId] = readField(col, fieldEl);
+  }
+  return values;
+}
+
+function applyConditions() {
+  // Itère jusqu'à stabilité pour gérer les dépendances en cascade.
+  for (let pass = 0; pass < 10; pass++) {
+    let changed = false;
+    const values = getFormValuesForConditions();
+    for (const col of state.columns) {
+      const ovr = state.validators[col.colId] || {};
+      const expr = ovr.showIf && String(ovr.showIf).trim();
+      if (!expr) continue;
+      const fieldEl = document.querySelector(`.field[data-col="${CSS.escape(col.colId)}"]`);
+      if (!fieldEl) continue;
+      const preds = parseShowIfFilter(expr);
+      const visible = preds.length > 0 && preds.every(p => evalFormPredicate(values, p));
+      const isHidden = fieldEl.classList.contains('field-hidden');
+      if (visible && isHidden) {
+        fieldEl.classList.remove('field-hidden');
+        changed = true;
+      } else if (!visible && !isHidden) {
+        fieldEl.classList.add('field-hidden');
+        // Efface aussi l'erreur visible éventuelle sur le champ caché
+        fieldEl.classList.remove('has-error');
+        const errEl = fieldEl.querySelector('.error');
+        if (errEl) errEl.textContent = '';
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
 }
 
 //
@@ -1073,10 +1155,18 @@ function renderForm() {
     document.querySelectorAll('.field-ac').forEach(ac => {
       if (typeof ac._reset === 'function') ac._reset();
     });
+    applyConditions();
   }, 0));
+
+  // Logique conditionnelle : on ré-évalue à chaque saisie/changement
+  form.addEventListener('input',  applyConditions);
+  form.addEventListener('change', applyConditions);
 
   card.appendChild(form);
   host.appendChild(card);
+
+  // Passe initiale (toutes les valeurs vides → on cache les champs conditionnels)
+  applyConditions();
 }
 
 function buildField(col) {
@@ -1276,6 +1366,7 @@ function buildAutocomplete(col, fid, isMulti, options) {
         renderChips();
         updateList();
         txt.focus();
+        wrap.dispatchEvent(new Event('change', { bubbles: true }));
       });
       chip.appendChild(rm);
       chipsBox.appendChild(chip);
@@ -1287,6 +1378,7 @@ function buildAutocomplete(col, fid, isMulti, options) {
     if (hidden) hidden.value = opt.value;
     list.style.display = 'none';
     activeIdx = -1;
+    (hidden || wrap).dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   function addMulti(opt) {
@@ -1295,6 +1387,7 @@ function buildAutocomplete(col, fid, isMulti, options) {
     txt.value = '';
     renderChips();
     updateList();
+    wrap.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   function updateList() {
@@ -1362,6 +1455,7 @@ function buildAutocomplete(col, fid, isMulti, options) {
       selectedIds.pop();
       renderChips();
       updateList();
+      wrap.dispatchEvent(new Event('change', { bubbles: true }));
     }
   });
 
@@ -1462,6 +1556,8 @@ async function onSubmit(ev) {
   for (const col of state.columns) {
     const fieldEl = document.querySelector(`.field[data-col="${CSS.escape(col.colId)}"]`);
     if (!fieldEl) continue;
+    // Champ masqué par la logique conditionnelle : on ne lit pas, on ne valide pas, on n'envoie pas
+    if (fieldEl.classList.contains('field-hidden')) continue;
     const raw = readField(col, fieldEl);
     const { value, error } = validateField(col, raw);
     if (error) {
@@ -1731,6 +1827,23 @@ function renderConfigPanel() {
       el('div', { class: 'full' }, [
         el('label', {}, 'Description / aide (sous le label)'),
         descTa,
+      ]),
+    ]));
+
+    // Logique conditionnelle : afficher ce champ uniquement si …
+    const showIfTa = el('textarea', {
+      'data-k': 'showIf', rows: '3',
+      placeholder: "Vide = toujours afficher. Ex :\nform.Type == 'Particulier'\nform.Age >= 18",
+    });
+    showIfTa.value = ovr.showIf || '';
+    card.appendChild(el('div', { class: 'row' }, [
+      el('div', { class: 'full' }, [
+        el('label', {}, 'Afficher uniquement si (logique conditionnelle)'),
+        showIfTa,
+        el('div', { class: 'hint' },
+          "Syntaxe : form.<colonne> <op> <valeur>. Opérateurs : == != < <= > >=. " +
+          "Valeurs : 'texte', \"texte\", nombre, true / false / null. " +
+          "Une condition par ligne (ET logique). Vide = toujours afficher."),
       ]),
     ]));
 
@@ -2290,17 +2403,31 @@ async function saveConfig() {
   state.validators = readConfigPanel();
   const colNameInput = document.getElementById('validation-col-name');
   if (colNameInput) state.validationColumnName = (colNameInput.value || 'Validation').trim();
+
+  // Capture aussi les champs de la section "Lien public" pour que "Enregistrer"
+  // persiste les mêmes valeurs que "Générer le lien".
+  const titleInput   = document.getElementById('standalone-title');
+  const successInput = document.getElementById('standalone-success');
+  const docUrlInput  = document.getElementById('standalone-doc-url');
+  if (titleInput)   state.standaloneTitle   = (titleInput.value   || 'Formulaire').trim();
+  if (successInput) state.standaloneSuccess = (successInput.value || 'Merci, votre réponse a été enregistrée.').trim();
+  if (docUrlInput)  state.docUrl            = (docUrlInput.value  || '').trim() || null;
+
   try {
     await grist.setOption('validators', state.validators);
     await grist.setOption('uniqueGroups', state.uniqueGroups || []);
     await grist.setOption('textBlocks', state.textBlocks || []);
     await grist.setOption('fieldOrder', state.fieldOrder || []);
     await grist.setOption('validationColumnName', state.validationColumnName);
+    await grist.setOption('standaloneTitle',   state.standaloneTitle);
+    await grist.setOption('standaloneSuccess', state.standaloneSuccess);
+    await grist.setOption('docUrl',            state.docUrl);
 
     // Recharge le schéma pour que les refOptions reflètent les nouveaux filtres.
     // Le fieldOrder est ré-appliqué automatiquement en fin de loadSchema.
     try { await loadSchema(); } catch (e) { console.warn('[form-validator] loadSchema:', e); }
 
+    applyStandaloneTitleToTopbar();
     showToast("Règles enregistrées ✓", 'ok');
     renderForm();   // refresh des inputs (regex maxlength, etc.)
     closeConfig();
@@ -2308,6 +2435,15 @@ async function saveConfig() {
     console.error('[form-validator] setOption a échoué :', e);
     showToast("Échec de l'enregistrement de la config", 'err');
   }
+}
+
+function applyStandaloneTitleToTopbar() {
+  const h2 = document.querySelector('#topbar-left h2');
+  if (!h2) return;
+  const t = (state.standaloneTitle || '').trim();
+  // En mode Grist embarqué, on n'écrase le titre par défaut que si l'utilisateur
+  // a saisi un titre personnalisé (différent du placeholder "Formulaire")
+  h2.textContent = (t && t !== 'Formulaire') ? t : 'Formulaire validé';
 }
 
 //
@@ -2550,6 +2686,7 @@ async function bootGrist() {
     state.standaloneTitle      = (opts && opts.standaloneTitle)   || 'Formulaire';
     state.standaloneSuccess    = (opts && opts.standaloneSuccess) || 'Merci, votre réponse a été enregistrée.';
     state.docUrl               = (opts && opts.docUrl) || null;
+    applyStandaloneTitleToTopbar();
     renderForm();
   });
 
