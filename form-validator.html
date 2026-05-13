@@ -163,6 +163,38 @@
     .field-checkbox input { width: 16px; height: 16px; }
     .field-checkbox label { margin: 0; cursor: pointer; }
 
+    /* Groupes radio / cases à cocher (Choice/ChoiceList/Ref/RefList) */
+    .field-options-group {
+      display: flex; flex-direction: column;
+      gap: 4px;
+      padding: 4px 0;
+    }
+    .field-option {
+      display: flex; align-items: center;
+      gap: 8px; padding: 2px 0;
+    }
+    .field-option input[type="radio"],
+    .field-option input[type="checkbox"] {
+      width: 16px; height: 16px;
+      margin: 0;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .field-option label {
+      display: inline;
+      font-size: 0.88rem;
+      font-weight: 400;
+      margin: 0;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .field-options-empty {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-style: italic;
+      padding: 4px 0;
+    }
+
     .multi-tags {
       display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;
     }
@@ -490,7 +522,7 @@ const state = {
   ready:     false,
   tableId:   null,
   columns:   [],          // [{ colId, label, type, isFormula, formula, widgetOptions, choices }]
-  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique, customLabel, description } }
+  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique, customLabel, description, widget } }
   uniqueGroups: [],       // contraintes d'unicité composite : [["Nom","Prenom"], ["Email","Tel"]]
   textBlocks: [],         // blocs de texte libres dans le formulaire : [{ content, position }]
   validationColumnName: 'Validation',
@@ -561,6 +593,12 @@ async function loadSchema() {
   }
   if (parentId == null) throw new Error("Table introuvable dans les métadonnées : " + tableId);
 
+  // Lookup : rowId d'une colonne (dans _grist_Tables_column) → index dans le tableau
+  const colIndexById = {};
+  for (let i = 0; i < cols.id.length; i++) {
+    colIndexById[cols.id[i]] = i;
+  }
+
   const out = [];
   for (let i = 0; i < cols.id.length; i++) {
     if (cols.parentId[i] !== parentId) continue;
@@ -574,17 +612,55 @@ async function loadSchema() {
 
     const widgetOptions = parseWidgetOptions(cols.widgetOptions[i]);
     const choices = Array.isArray(widgetOptions.choices) ? widgetOptions.choices : null;
+    const type = cols.type[i] || 'Any';
+    const base = baseTypeOf(type);
+
+    let refOptions = null;
+    if (base === 'Ref' || base === 'RefList') {
+      const targetTableId = type.split(':')[1];
+      const visRowId = (cols.visibleCol && cols.visibleCol[i]) || 0;
+      let visibleColId = null;
+      if (visRowId && colIndexById[visRowId] !== undefined) {
+        visibleColId = cols.colId[colIndexById[visRowId]];
+      }
+      refOptions = await loadRefOptions(targetTableId, visibleColId);
+    }
 
     out.push({
       colId,
       label: cols.label[i] || colId,
-      type: cols.type[i] || 'Any',
+      type,
       isFormula,
       widgetOptions,
       choices,
+      refOptions,
     });
   }
   state.columns = out;
+}
+
+async function loadRefOptions(targetTableId, visibleColId) {
+  if (!targetTableId) return [];
+  try {
+    const tbl = await grist.docApi.fetchTable(targetTableId);
+    const ids = tbl.id || [];
+    const displayArr = visibleColId && Array.isArray(tbl[visibleColId]) ? tbl[visibleColId] : null;
+    const out = [];
+    for (let i = 0; i < ids.length; i++) {
+      let v = displayArr ? displayArr[i] : ids[i];
+      let display;
+      if (v == null) display = String(ids[i]);
+      else if (Array.isArray(v)) display = v.slice(v[0] === 'L' ? 1 : 0).join(', ');
+      else display = String(v);
+      out.push({ id: ids[i], display });
+    }
+    out.sort((a, b) =>
+      a.display.localeCompare(b.display, undefined, { numeric: true, sensitivity: 'base' }));
+    return out;
+  } catch (e) {
+    console.warn('[form-validator] loadRefOptions a échoué pour', targetTableId, e);
+    return [];
+  }
 }
 
 //
@@ -678,6 +754,31 @@ function validateField(col, rawValue) {
         }
       }
       parsed = ['L', ...arr];
+      break;
+    }
+    case 'Ref': {
+      const n = parseInt(rawValue, 10);
+      if (!Number.isFinite(n) || n <= 0)
+        return { value: null, error: "Référence invalide" };
+      const options = Array.isArray(col.refOptions) ? col.refOptions : null;
+      if (options && options.length && !options.some(o => Number(o.id) === n))
+        return { value: null, error: "Référence hors de la liste autorisée" };
+      parsed = n;
+      break;
+    }
+    case 'RefList': {
+      const arr = Array.isArray(rawValue) ? rawValue : [];
+      const options = Array.isArray(col.refOptions) ? col.refOptions : null;
+      const ids = [];
+      for (const v of arr) {
+        const n = parseInt(v, 10);
+        if (!Number.isFinite(n) || n <= 0)
+          return { value: null, error: `Référence invalide : ${v}` };
+        if (options && options.length && !options.some(o => Number(o.id) === n))
+          return { value: null, error: `Référence "${v}" hors de la liste autorisée` };
+        ids.push(n);
+      }
+      parsed = ['L', ...ids];
       break;
     }
     case 'Text':
@@ -790,7 +891,16 @@ function buildField(col) {
   wrap.appendChild(el('label', { for: fid }, [labelText, meta]));
   if (desc) wrap.appendChild(el('div', { class: 'field-desc' }, desc));
 
-  if (base === 'Choice' && col.choices) {
+  const widgetPref = ovr.widget || 'select';
+  const isOptionField = ['Choice', 'ChoiceList', 'Ref', 'RefList'].includes(base);
+  const isMultiField  = base === 'ChoiceList' || base === 'RefList';
+  const useRadio    = isOptionField && !isMultiField && widgetPref === 'radio';
+  const useCheckbox = isOptionField &&  isMultiField && widgetPref === 'checkbox';
+
+  if (useRadio || useCheckbox) {
+    input = buildOptionGroup(col, fid, useRadio ? 'radio' : 'checkbox', getFieldOptions(col));
+  }
+  else if (base === 'Choice' && col.choices) {
     input = el('select', { id: fid, name: col.colId });
     input.appendChild(el('option', { value: '' }, '— sélectionner —'));
     for (const c of col.choices) input.appendChild(el('option', { value: c }, c));
@@ -798,6 +908,29 @@ function buildField(col) {
   else if (base === 'ChoiceList' && col.choices) {
     input = el('select', { id: fid, name: col.colId, multiple: 'multiple', size: Math.min(col.choices.length, 5) });
     for (const c of col.choices) input.appendChild(el('option', { value: c }, c));
+  }
+  else if (base === 'Ref') {
+    const options = Array.isArray(col.refOptions) ? col.refOptions : [];
+    input = el('select', { id: fid, name: col.colId });
+    input.appendChild(el('option', { value: '' },
+      options.length ? '— sélectionner —' : '— aucune valeur disponible —'));
+    for (const opt of options) {
+      input.appendChild(el('option', { value: String(opt.id) }, opt.display || String(opt.id)));
+    }
+  }
+  else if (base === 'RefList') {
+    const options = Array.isArray(col.refOptions) ? col.refOptions : [];
+    input = el('select', {
+      id: fid, name: col.colId, multiple: 'multiple',
+      size: Math.min(Math.max(options.length, 2), 6),
+    });
+    if (options.length === 0) {
+      input.appendChild(el('option', { value: '', disabled: 'disabled' },
+        '— aucune valeur disponible —'));
+    }
+    for (const opt of options) {
+      input.appendChild(el('option', { value: String(opt.id) }, opt.display || String(opt.id)));
+    }
   }
   else if (base === 'Date') {
     input = el('input', { type: 'date', id: fid, name: col.colId });
@@ -843,12 +976,61 @@ function buildTextBlock(block) {
   return el('div', { class: 'form-text-block' }, String(block.content || ''));
 }
 
+function getFieldOptions(col) {
+  if (Array.isArray(col.refOptions)) {
+    return col.refOptions.map(o => ({
+      value: String(o.id),
+      label: o.display || String(o.id),
+    }));
+  }
+  if (Array.isArray(col.choices)) {
+    return col.choices.map(c => ({ value: c, label: c }));
+  }
+  return [];
+}
+
+function buildOptionGroup(col, fid, inputType, options) {
+  const group = el('div', { class: 'field-options-group' });
+  if (options.length === 0) {
+    group.appendChild(el('div', { class: 'field-options-empty' },
+      'Aucune valeur disponible.'));
+    return group;
+  }
+  options.forEach((opt, i) => {
+    const optId = fid + '-opt-' + i;
+    const inp = el('input', {
+      type: inputType,
+      id: optId,
+      name: inputType === 'radio' ? col.colId : col.colId + '__' + i,
+      value: opt.value,
+    });
+    const lbl = el('label', { for: optId }, opt.label);
+    group.appendChild(el('div', { class: 'field-option' }, [inp, lbl]));
+  });
+  return group;
+}
+
 function readField(col, fieldEl) {
   const base = baseTypeOf(col.type);
+  const ovr  = state.validators[col.colId] || {};
   if (base === 'Bool') return fieldEl.querySelector('input[type="checkbox"]').checked;
-  if (base === 'ChoiceList') {
+
+  // Boutons radio (Choice / Ref en mode "radio")
+  if (ovr.widget === 'radio' && (base === 'Choice' || base === 'Ref')) {
+    const checked = fieldEl.querySelector('.field-options-group input[type="radio"]:checked');
+    return checked ? checked.value : '';
+  }
+  // Cases à cocher (ChoiceList / RefList en mode "checkbox")
+  if (ovr.widget === 'checkbox' && (base === 'ChoiceList' || base === 'RefList')) {
+    return Array.from(fieldEl.querySelectorAll('.field-options-group input[type="checkbox"]:checked'))
+      .map(cb => cb.value);
+  }
+
+  if (base === 'ChoiceList' || base === 'RefList') {
     const sel = fieldEl.querySelector('select');
-    return Array.from(sel.selectedOptions).map(o => o.value);
+    return Array.from(sel.selectedOptions)
+      .map(o => o.value)
+      .filter(v => v !== '');
   }
   const inp = fieldEl.querySelector('input, select, textarea');
   if (!inp) return null;
@@ -1139,6 +1321,28 @@ function renderConfigPanel() {
         descTa,
       ]),
     ]));
+
+    // Apparence : menu déroulant / radio / cases à cocher
+    if (base === 'Choice' || base === 'Ref' || base === 'ChoiceList' || base === 'RefList') {
+      const isMulti = (base === 'ChoiceList' || base === 'RefList');
+      const choices = isMulti
+        ? [['select', 'Menu déroulant (multi)'], ['checkbox', 'Cases à cocher']]
+        : [['select', 'Menu déroulant'],          ['radio',    'Boutons radio']];
+      card.appendChild(el('div', { class: 'row' }, [
+        el('div', { class: 'full' }, [
+          el('label', {}, 'Apparence du champ'),
+          (() => {
+            const sel = el('select', { 'data-k': 'widget' });
+            for (const [val, lbl] of choices) {
+              const opt = el('option', { value: val }, lbl);
+              if ((ovr.widget || 'select') === val) opt.selected = true;
+              sel.appendChild(opt);
+            }
+            return sel;
+          })(),
+        ]),
+      ]));
+    }
 
     // Format prédéfini (pertinent surtout pour Text/Any)
     if (base === 'Text' || base === 'Any') {
@@ -1545,7 +1749,8 @@ async function onGeneratePublicLink(ev) {
     docUrl:         state.docUrl,
     tableId:        state.tableId,
     columns: state.columns.map(c => ({
-      colId: c.colId, label: c.label, type: c.type, choices: c.choices,
+      colId: c.colId, label: c.label, type: c.type,
+      choices: c.choices, refOptions: c.refOptions,
     })),
     validators:   state.validators,
     uniqueGroups: state.uniqueGroups || [],
@@ -1928,18 +2133,30 @@ function parseGristDocUrl(url) {
   return null;
 }
 
+// LZString v1.5.0 (pieroxy/lz-string, licence MIT) — fournit compressToEncodedURIComponent
+// et decompressFromEncodedURIComponent, qui produisent une chaîne URL-safe.
+// Format minifié inline pour rester autonome (pas de CDN).
+var LZString=function(){var r=String.fromCharCode,o="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",n="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-$",e={};function t(r,o){if(!e[r]){e[r]={};for(var n=0;n<r.length;n++)e[r][r.charAt(n)]=n}return e[r][o]}var i={compressToBase64:function(r){if(null==r)return"";var n=i._compress(r,6,function(r){return o.charAt(r)});switch(n.length%4){default:case 0:return n;case 1:return n+"===";case 2:return n+"==";case 3:return n+"="}},decompressFromBase64:function(r){return null==r?"":""==r?null:i._decompress(r.length,32,function(n){return t(o,r.charAt(n))})},compressToUTF16:function(o){return null==o?"":i._compress(o,15,function(o){return r(o+32)})+" "},decompressFromUTF16:function(o){return null==o?"":""==o?null:i._decompress(o.length,16384,function(r){return o.charCodeAt(r)-32})},compressToUint8Array:function(r){for(var o=i.compress(r),n=new Uint8Array(2*o.length),e=0,t=o.length;e<t;e++){var s=o.charCodeAt(e);n[2*e]=s>>>8,n[2*e+1]=s%256}return n},decompressFromUint8Array:function(o){if(null===o||void 0===o)return i.decompress(o);for(var n=new Array(o.length/2),e=0,t=n.length;e<t;e++)n[e]=256*o[2*e]+o[2*e+1];var s=[];return n.forEach(function(o){s.push(r(o))}),i.decompress(s.join(""))},compressToEncodedURIComponent:function(r){return null==r?"":i._compress(r,6,function(r){return n.charAt(r)})},decompressFromEncodedURIComponent:function(r){return null==r?"":""==r?null:(r=r.replace(/ /g,"+"),i._decompress(r.length,32,function(o){return t(n,r.charAt(o))}))},compress:function(r){return i._compress(r,16,function(r){return String.fromCharCode(r)})},_compress:function(o,n,e){if(null==o)return"";var t,i,s,u={},p={},c="",f="",a="",l=2,h=3,d=2,m=[],v=0,g=0;for(s=0;s<o.length;s+=1)if(c=o.charAt(s),Object.prototype.hasOwnProperty.call(u,c)||(u[c]=h++,p[c]=!0),f=a+c,Object.prototype.hasOwnProperty.call(u,f))a=f;else{if(Object.prototype.hasOwnProperty.call(p,a)){if(a.charCodeAt(0)<256){for(t=0;t<d;t++)v<<=1,g==n-1?(g=0,m.push(e(v)),v=0):g++;for(i=a.charCodeAt(0),t=0;t<8;t++)v=v<<1|1&i,g==n-1?(g=0,m.push(e(v)),v=0):g++,i>>=1}else{for(i=1,t=0;t<d;t++)v=v<<1|i,g==n-1?(g=0,m.push(e(v)),v=0):g++,i=0;for(i=a.charCodeAt(0),t=0;t<16;t++)v=v<<1|1&i,g==n-1?(g=0,m.push(e(v)),v=0):g++,i>>=1}0==--l&&(l=Math.pow(2,d),d++),delete p[a]}else for(i=u[a],t=0;t<d;t++)v=v<<1|1&i,g==n-1?(g=0,m.push(e(v)),v=0):g++,i>>=1;0==--l&&(l=Math.pow(2,d),d++),u[f]=h++,a=String(c)}if(""!==a){if(Object.prototype.hasOwnProperty.call(p,a)){if(a.charCodeAt(0)<256){for(t=0;t<d;t++)v<<=1,g==n-1?(g=0,m.push(e(v)),v=0):g++;for(i=a.charCodeAt(0),t=0;t<8;t++)v=v<<1|1&i,g==n-1?(g=0,m.push(e(v)),v=0):g++,i>>=1}else{for(i=1,t=0;t<d;t++)v=v<<1|i,g==n-1?(g=0,m.push(e(v)),v=0):g++,i=0;for(i=a.charCodeAt(0),t=0;t<16;t++)v=v<<1|1&i,g==n-1?(g=0,m.push(e(v)),v=0):g++,i>>=1}0==--l&&(l=Math.pow(2,d),d++),delete p[a]}else for(i=u[a],t=0;t<d;t++)v=v<<1|1&i,g==n-1?(g=0,m.push(e(v)),v=0):g++,i>>=1;0==--l&&(l=Math.pow(2,d),d++)}for(i=2,t=0;t<d;t++)v=v<<1|1&i,g==n-1?(g=0,m.push(e(v)),v=0):g++,i>>=1;for(;;){if(v<<=1,g==n-1){m.push(e(v));break}g++}return m.join("")},decompress:function(r){return null==r?"":""==r?null:i._decompress(r.length,32768,function(o){return r.charCodeAt(o)})},_decompress:function(o,n,e){var t,i,s,u,p,c,f,a=[],l=4,h=4,d=3,m="",v=[],g={val:e(0),position:n,index:1};for(t=0;t<3;t+=1)a[t]=t;for(s=0,p=Math.pow(2,2),c=1;c!=p;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*c,c<<=1;switch(s){case 0:for(s=0,p=Math.pow(2,8),c=1;c!=p;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*c,c<<=1;f=r(s);break;case 1:for(s=0,p=Math.pow(2,16),c=1;c!=p;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*c,c<<=1;f=r(s);break;case 2:return""}for(a[3]=f,i=f,v.push(f);;){if(g.index>o)return"";for(s=0,p=Math.pow(2,d),c=1;c!=p;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*c,c<<=1;switch(f=s){case 0:for(s=0,p=Math.pow(2,8),c=1;c!=p;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*c,c<<=1;a[h++]=r(s),f=h-1,l--;break;case 1:for(s=0,p=Math.pow(2,16),c=1;c!=p;)u=g.val&g.position,g.position>>=1,0==g.position&&(g.position=n,g.val=e(g.index++)),s|=(u>0?1:0)*c,c<<=1;a[h++]=r(s),f=h-1,l--;break;case 2:return v.join("")}if(0==l&&(l=Math.pow(2,d),d++),a[f])m=a[f];else{if(f!==h)return null;m=i+i.charAt(0)}v.push(m),a[h++]=i+m.charAt(0),i=m,0==--l&&(l=Math.pow(2,d),d++)}}};return i}();
+
+const CFG_LZ_PREFIX = 'lz1-';
+
 function encodeStandaloneCfg(obj) {
   const json = JSON.stringify(obj);
-  // base64 URL-safe (avec gestion UTF-8)
-  return btoa(unescape(encodeURIComponent(json)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return CFG_LZ_PREFIX + LZString.compressToEncodedURIComponent(json);
 }
 
-function decodeStandaloneCfg(b64) {
-  if (!b64) throw new Error("Paramètre cfg manquant");
-  let s = b64.replace(/-/g, '+').replace(/_/g, '/');
-  while (s.length % 4) s += '=';
-  return JSON.parse(decodeURIComponent(escape(atob(s))));
+function decodeStandaloneCfg(s) {
+  if (!s) throw new Error("Paramètre cfg manquant");
+  // Nouveau format compressé (préfixe "lz1-")
+  if (s.startsWith(CFG_LZ_PREFIX)) {
+    const json = LZString.decompressFromEncodedURIComponent(s.slice(CFG_LZ_PREFIX.length));
+    if (!json) throw new Error("Échec de décompression du cfg");
+    return JSON.parse(json);
+  }
+  // Ancien format base64 URL-safe (rétro-compatibilité)
+  let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  return JSON.parse(decodeURIComponent(escape(atob(b64))));
 }
 
 async function refresh() {
