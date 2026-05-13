@@ -610,7 +610,7 @@ const state = {
   ready:     false,
   tableId:   null,
   columns:   [],          // [{ colId, label, type, isFormula, formula, widgetOptions, choices }]
-  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique, customLabel, description, widget, refFilter } }
+  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique, customLabel, description, widget, refFilter, required } }
   uniqueGroups: [],       // contraintes d'unicité composite : [["Nom","Prenom"], ["Email","Tel"]]
   textBlocks: [],         // blocs de texte libres dans le formulaire : [{ content, position }]
   fieldOrder: [],         // ordre d'affichage des champs (liste de colId) ; vide = ordre naturel
@@ -881,6 +881,9 @@ function validateField(col, rawValue) {
 
   // Cas vide : pas d'envoi (Grist gardera vide). On laisse passer sauf si une regex/longueur exige du contenu.
   if (isEmpty) {
+    if (ovr.required) {
+      return { value: null, error: ovr.errorMsg || "Ce champ est obligatoire" };
+    }
     // Si une longueur min > 0 ou une regex est définie comme override, on considère que le vide est invalide.
     if (ovr.minLength && Number(ovr.minLength) > 0) {
       return { value: null, error: `Longueur minimale : ${ovr.minLength}` };
@@ -920,6 +923,9 @@ function validateField(col, rawValue) {
       break;
     }
     case 'Bool': {
+      if (ovr.required && !rawValue) {
+        return { value: null, error: ovr.errorMsg || "Vous devez cocher cette case" };
+      }
       parsed = !!rawValue;
       break;
     }
@@ -1079,16 +1085,18 @@ function buildField(col) {
   const fid  = 'f-' + col.colId;
   const wrap = el('div', { class: 'field', 'data-col': col.colId, 'data-type': base });
 
-  // Label affiché (custom > label Grist) + badge de type + indicateur de format
+  // Label affiché (custom > label Grist) + astérisque si obligatoire + badge de type
   const labelText = (ovr.customLabel && String(ovr.customLabel).trim()) || col.label;
   const fmtSuffix = ovr.format && ovr.format !== 'none' ? ` · ${ovr.format}` : '';
   const meta = el('span', { class: 'meta' }, [`(${col.type}${fmtSuffix})`]);
   const desc = ovr.description && String(ovr.description).trim();
+  const reqMark = ovr.required ? el('span', { class: 'req-mark', title: 'Champ obligatoire' }, '*') : null;
+  const labelChildren = reqMark ? [labelText, reqMark, meta] : [labelText, meta];
 
   let input;
   if (base === 'Bool') {
     input = el('input', { type: 'checkbox', id: fid });
-    const label = el('label', { for: fid }, [labelText, meta]);
+    const label = el('label', { for: fid }, labelChildren);
     const row = el('div', { class: 'field-checkbox' }, [input, label]);
     wrap.appendChild(row);
     if (desc) wrap.appendChild(el('div', { class: 'field-desc' }, desc));
@@ -1097,7 +1105,7 @@ function buildField(col) {
   }
 
   // Label commun
-  wrap.appendChild(el('label', { for: fid }, [labelText, meta]));
+  wrap.appendChild(el('label', { for: fid }, labelChildren));
   if (desc) wrap.appendChild(el('div', { class: 'field-desc' }, desc));
 
   const widgetPref = ovr.widget || 'select';
@@ -1832,10 +1840,25 @@ function renderConfigPanel() {
         "Validation automatique selon le type Grist. Pas de surcharge supplémentaire pour ce type."));
     }
 
-    // Case "Interdire les doublons" — disponible pour tous les types
-    const uniqWrap = el('div', {
+    // Case "Champ obligatoire" — disponible pour tous les types
+    const reqWrap = el('div', {
       style: 'margin-top:10px; padding-top:8px; border-top:1px dashed var(--border); ' +
              'display:flex; align-items:center; gap:6px;'
+    });
+    const reqCb = el('input', { type: 'checkbox', 'data-k': 'required', id: 'req-' + col.colId });
+    reqCb.checked = !!ovr.required;
+    const reqLbl = el('label', {
+      for: 'req-' + col.colId,
+      style: 'cursor:pointer; font-size:0.78rem; color:var(--text); margin:0; ' +
+             'text-transform:none; letter-spacing:0; font-weight:500;'
+    }, 'Champ obligatoire (doit être renseigné)');
+    reqWrap.appendChild(reqCb);
+    reqWrap.appendChild(reqLbl);
+    card.appendChild(reqWrap);
+
+    // Case "Interdire les doublons" — disponible pour tous les types
+    const uniqWrap = el('div', {
+      style: 'margin-top:6px; display:flex; align-items:center; gap:6px;'
     });
     const uniqCb = el('input', { type: 'checkbox', 'data-k': 'unique', id: 'unq-' + col.colId });
     uniqCb.checked = !!ovr.unique;
@@ -2320,6 +2343,20 @@ function generateValidationFormula() {
     const customMsg = ovr.errorMsg ? escapePyStr(ovr.errorMsg) : null;
 
     let block = false; // a-t-on écrit au moins une règle pour cette colonne ?
+
+    // ── Champ obligatoire (universel, tous types) ──
+    if (ovr.required) {
+      if (!block) { out.push(`# ${col.colId} (${col.type})`); out.push(`v = ${ref}`); block = true; }
+      const m = customMsg || 'ce champ est obligatoire';
+      // Pour Numeric/Int/Date/DateTime, 0 est une valeur valide → on n'utilise pas "not v"
+      const acceptsZero = ['Numeric', 'Int', 'Date', 'DateTime'].includes(base);
+      const cond = acceptsZero
+        ? `v is None or v == ''`
+        : `not v or v == ['L'] or (isinstance(v, str) and not v.strip())`;
+      out.push(`if ${cond}:`);
+      out.push(`    errors.append('${lbl} : ${m}')`);
+      hasAnyRule = true;
+    }
 
     // ── Numeric / Int : min / max ──
     if ((base === 'Numeric' || base === 'Int') &&
