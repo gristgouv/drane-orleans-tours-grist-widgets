@@ -270,10 +270,30 @@
       margin-bottom: 10px;
     }
     .col-config-head {
-      display: flex; align-items: baseline; justify-content: space-between;
+      display: flex; align-items: center; gap: 6px;
       margin-bottom: 8px;
     }
-    .col-config-head strong { font-size: 0.88rem; }
+    .col-config-head strong { font-size: 0.88rem; flex: 1; }
+    .col-reorder {
+      display: inline-flex; gap: 2px;
+    }
+    .col-reorder button {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      width: 22px; height: 22px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.7rem;
+      line-height: 1;
+      padding: 0;
+    }
+    .col-reorder button:hover:not(:disabled) {
+      border-color: var(--accent); color: var(--accent);
+    }
+    .col-reorder button:disabled {
+      opacity: 0.35; cursor: not-allowed;
+    }
     .col-config-head .type-badge {
       font-size: 0.7rem;
       background: var(--aclt);
@@ -522,9 +542,10 @@ const state = {
   ready:     false,
   tableId:   null,
   columns:   [],          // [{ colId, label, type, isFormula, formula, widgetOptions, choices }]
-  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique, customLabel, description, widget } }
+  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique, customLabel, description, widget, refFilter } }
   uniqueGroups: [],       // contraintes d'unicité composite : [["Nom","Prenom"], ["Email","Tel"]]
   textBlocks: [],         // blocs de texte libres dans le formulaire : [{ content, position }]
+  fieldOrder: [],         // ordre d'affichage des champs (liste de colId) ; vide = ordre naturel
   validationColumnName: 'Validation',
   // Mode public / standalone (formulaire ouvert hors de Grist)
   server:    null,        // ex. "https://grist.exemple.fr"
@@ -623,7 +644,8 @@ async function loadSchema() {
       if (visRowId && colIndexById[visRowId] !== undefined) {
         visibleColId = cols.colId[colIndexById[visRowId]];
       }
-      refOptions = await loadRefOptions(targetTableId, visibleColId);
+      const filterExpr = state.validators[colId] && state.validators[colId].refFilter;
+      refOptions = await loadRefOptions(targetTableId, visibleColId, filterExpr);
     }
 
     out.push({
@@ -637,16 +659,19 @@ async function loadSchema() {
     });
   }
   state.columns = out;
+  applyFieldOrder();
 }
 
-async function loadRefOptions(targetTableId, visibleColId) {
+async function loadRefOptions(targetTableId, visibleColId, filterExpr) {
   if (!targetTableId) return [];
   try {
     const tbl = await grist.docApi.fetchTable(targetTableId);
     const ids = tbl.id || [];
     const displayArr = visibleColId && Array.isArray(tbl[visibleColId]) ? tbl[visibleColId] : null;
+    const predicates = parseRefFilter(filterExpr);
     const out = [];
     for (let i = 0; i < ids.length; i++) {
+      if (predicates.length && !predicates.every(p => evalRefPredicate(tbl, i, p))) continue;
       let v = displayArr ? displayArr[i] : ids[i];
       let display;
       if (v == null) display = String(ids[i]);
@@ -661,6 +686,116 @@ async function loadRefOptions(targetTableId, visibleColId) {
     console.warn('[form-validator] loadRefOptions a échoué pour', targetTableId, e);
     return [];
   }
+}
+
+//
+// ─── Filtre des valeurs de référence (DSL "choice.col <op> <valeur>") ──────
+//
+function parseRefFilter(expr) {
+  if (!expr || typeof expr !== 'string') return [];
+  const out = [];
+  for (let line of expr.split(/\r?\n/)) {
+    line = line.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = /^choice\.([A-Za-z_][A-Za-z0-9_]*)\s*(==|!=|<=|>=|<|>)\s*(.+)$/.exec(line);
+    if (!m) {
+      console.warn('[form-validator] refFilter: ligne ignorée (syntaxe invalide) :', line);
+      continue;
+    }
+    const [, colName, op, rawValue] = m;
+    let value;
+    try { value = parseFilterLiteral(rawValue.trim()); }
+    catch (e) {
+      console.warn('[form-validator] refFilter: littéral invalide :', rawValue);
+      continue;
+    }
+    out.push({ colName, op, value });
+  }
+  return out;
+}
+
+function parseFilterLiteral(s) {
+  if (s === 'null')  return null;
+  if (s === 'true')  return true;
+  if (s === 'false') return false;
+  if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+  if (s.length >= 2) {
+    const q = s.charAt(0);
+    if ((q === '"' || q === "'") && s.charAt(s.length - 1) === q) {
+      return s.slice(1, -1).replace(/\\(.)/g, (_, c) =>
+        c === 'n' ? '\n' : c === 't' ? '\t' : c === 'r' ? '\r' : c);
+    }
+  }
+  throw new Error("Littéral non reconnu : " + s);
+}
+
+function evalRefPredicate(tbl, i, pred) {
+  const arr = tbl[pred.colName];
+  if (!arr) return false;
+  const v = arr[i];
+  switch (pred.op) {
+    case '==': return refValueEq(v, pred.value);
+    case '!=': return !refValueEq(v, pred.value);
+    case '<':  return refValueCmp(v, pred.value) <  0;
+    case '<=': return refValueCmp(v, pred.value) <= 0;
+    case '>':  return refValueCmp(v, pred.value) >  0;
+    case '>=': return refValueCmp(v, pred.value) >= 0;
+  }
+  return false;
+}
+
+function refValueEq(a, b) {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  if (Array.isArray(a)) {
+    const items = a[0] === 'L' ? a.slice(1) : a;
+    return items.some(v => refValueEq(v, b));
+  }
+  if (typeof a === 'number' || typeof b === 'number') {
+    const na = Number(a), nb = Number(b);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na === nb;
+  }
+  return String(a) === String(b);
+}
+
+function refValueCmp(a, b) {
+  const na = Number(a), nb = Number(b);
+  if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+  return String(a).localeCompare(String(b));
+}
+
+//
+// ─── Ordre d'affichage des champs ──────────────────────────────────────────
+//
+function applyFieldOrder() {
+  const order = Array.isArray(state.fieldOrder) ? state.fieldOrder : [];
+  if (order.length === 0) return;
+  const byId = Object.fromEntries(state.columns.map(c => [c.colId, c]));
+  const seen = new Set();
+  const out = [];
+  for (const colId of order) {
+    if (byId[colId] && !seen.has(colId)) {
+      out.push(byId[colId]);
+      seen.add(colId);
+    }
+  }
+  for (const c of state.columns) {
+    if (!seen.has(c.colId)) out.push(c);
+  }
+  state.columns = out;
+}
+
+function moveField(colId, direction) {
+  const i = state.columns.findIndex(c => c.colId === colId);
+  if (i < 0) return false;
+  const j = i + direction;
+  if (j < 0 || j >= state.columns.length) return false;
+  const cols = state.columns.slice();
+  [cols[i], cols[j]] = [cols[j], cols[i]];
+  state.columns    = cols;
+  state.fieldOrder = cols.map(c => c.colId);
+  return true;
 }
 
 //
@@ -1289,12 +1424,25 @@ function renderConfigPanel() {
     return;
   }
 
-  for (const col of state.columns) {
+  state.columns.forEach((col, colIdx) => {
     const ovr  = state.validators[col.colId] || {};
     const base = baseTypeOf(col.type);
     const card = el('div', { class: 'col-config', 'data-col': col.colId });
 
+    const totalCols = state.columns.length;
+    const upBtn = el('button', {
+      type: 'button', title: 'Monter ce champ',
+    }, '▲');
+    const downBtn = el('button', {
+      type: 'button', title: 'Descendre ce champ',
+    }, '▼');
+    if (colIdx === 0) upBtn.disabled = true;
+    if (colIdx === totalCols - 1) downBtn.disabled = true;
+    upBtn.addEventListener('click',   () => onMoveCol(col.colId, -1));
+    downBtn.addEventListener('click', () => onMoveCol(col.colId,  1));
+
     card.appendChild(el('div', { class: 'col-config-head' }, [
+      el('span', { class: 'col-reorder' }, [upBtn, downBtn]),
       el('strong', {}, col.label + ' '),
       el('span', { class: 'type-badge' }, col.type),
     ]));
@@ -1340,6 +1488,25 @@ function renderConfigPanel() {
             }
             return sel;
           })(),
+        ]),
+      ]));
+    }
+
+    // Filtre des valeurs proposées (Ref / RefList uniquement)
+    if (base === 'Ref' || base === 'RefList') {
+      const filterTa = el('textarea', {
+        'data-k': 'refFilter', rows: '3',
+        placeholder: "Ex :\nchoice.Decision_1 == 'Accepté'\nchoice.Statut != 'Archivé'",
+      });
+      filterTa.value = ovr.refFilter || '';
+      card.appendChild(el('div', { class: 'row' }, [
+        el('div', { class: 'full' }, [
+          el('label', {}, 'Filtre des valeurs proposées'),
+          filterTa,
+          el('div', { class: 'hint' },
+            "Syntaxe : choice.<colonne> <op> <valeur>. Opérateurs : == != < <= > >=. " +
+            "Valeurs : 'texte', \"texte\", nombre, true / false / null. " +
+            "Une condition par ligne (ET logique). Ligne commençant par # = commentaire."),
         ]),
       ]));
     }
@@ -1424,12 +1591,20 @@ function renderConfigPanel() {
     card.appendChild(uniqWrap);
 
     body.appendChild(card);
-  }
+  });
 
   renderTextBlocksSection(body);
   renderUniqueGroupsSection(body);
   renderValidationColumnSection(body);
   renderPublicLinkSection(body);
+}
+
+function onMoveCol(colId, direction) {
+  // Capture les éditions en cours pour ne pas perdre les valeurs non sauvegardées
+  state.validators = readConfigPanel();
+  // (textBlocks et uniqueGroups sont déjà à jour via leurs écouteurs propres)
+  if (!moveField(colId, direction)) return;
+  renderConfigPanel();
 }
 
 function renderTextBlocksSection(body) {
@@ -1738,10 +1913,14 @@ async function onGeneratePublicLink(ev) {
     await grist.setOption('validators',        state.validators);
     await grist.setOption('uniqueGroups',      state.uniqueGroups || []);
     await grist.setOption('textBlocks',        state.textBlocks || []);
+    await grist.setOption('fieldOrder',        state.fieldOrder || []);
     await grist.setOption('standaloneTitle',   state.standaloneTitle);
     await grist.setOption('standaloneSuccess', state.standaloneSuccess);
     await grist.setOption('docUrl',            state.docUrl);
   } catch (e) { console.warn('[form-validator] setOption :', e); }
+
+  // Recharge le schéma pour que refOptions reflète d'éventuels nouveaux filtres
+  try { await loadSchema(); } catch (e) { console.warn('[form-validator] loadSchema:', e); }
 
   const cfg = {
     title:          state.standaloneTitle,
@@ -1755,6 +1934,7 @@ async function onGeneratePublicLink(ev) {
     validators:   state.validators,
     uniqueGroups: state.uniqueGroups || [],
     textBlocks:   state.textBlocks || [],
+    fieldOrder:   state.fieldOrder || [],
   };
   const cfgB64 = encodeStandaloneCfg(cfg);
   const pageUrl = window.location.href.split('#')[0].split('?')[0];
@@ -1833,7 +2013,13 @@ async function saveConfig() {
     await grist.setOption('validators', state.validators);
     await grist.setOption('uniqueGroups', state.uniqueGroups || []);
     await grist.setOption('textBlocks', state.textBlocks || []);
+    await grist.setOption('fieldOrder', state.fieldOrder || []);
     await grist.setOption('validationColumnName', state.validationColumnName);
+
+    // Recharge le schéma pour que les refOptions reflètent les nouveaux filtres.
+    // Le fieldOrder est ré-appliqué automatiquement en fin de loadSchema.
+    try { await loadSchema(); } catch (e) { console.warn('[form-validator] loadSchema:', e); }
+
     showToast("Règles enregistrées ✓", 'ok');
     renderForm();   // refresh des inputs (regex maxlength, etc.)
     closeConfig();
@@ -2049,7 +2235,10 @@ async function bootGrist() {
     state.validators = {};
     state.uniqueGroups = [];
     state.textBlocks = [];
-    renderConfigPanel();
+    state.fieldOrder = [];
+    // Recharge le schéma pour récupérer l'ordre natif des colonnes
+    loadSchema().catch(e => console.warn('[form-validator] reset/loadSchema:', e))
+      .finally(() => renderConfigPanel());
   });
   $('#btn-refresh').addEventListener('click', refresh);
 
@@ -2060,6 +2249,8 @@ async function bootGrist() {
     state.validators = (opts && opts.validators) || {};
     state.uniqueGroups = (opts && Array.isArray(opts.uniqueGroups)) ? opts.uniqueGroups : [];
     state.textBlocks   = (opts && Array.isArray(opts.textBlocks))   ? opts.textBlocks   : [];
+    state.fieldOrder   = (opts && Array.isArray(opts.fieldOrder))   ? opts.fieldOrder   : [];
+    applyFieldOrder();
     state.validationColumnName = (opts && opts.validationColumnName) || 'Validation';
     state.standaloneTitle      = (opts && opts.standaloneTitle)   || 'Formulaire';
     state.standaloneSuccess    = (opts && opts.standaloneSuccess) || 'Merci, votre réponse a été enregistrée.';
@@ -2096,6 +2287,8 @@ async function bootStandalone() {
     state.validators         = cfg.validators || {};
     state.uniqueGroups       = Array.isArray(cfg.uniqueGroups) ? cfg.uniqueGroups : [];
     state.textBlocks         = Array.isArray(cfg.textBlocks)   ? cfg.textBlocks   : [];
+    state.fieldOrder         = Array.isArray(cfg.fieldOrder)   ? cfg.fieldOrder   : [];
+    applyFieldOrder();
     state.standaloneTitle    = cfg.title || 'Formulaire';
     state.standaloneSuccess  = cfg.successMessage || 'Merci, votre réponse a été enregistrée.';
 
