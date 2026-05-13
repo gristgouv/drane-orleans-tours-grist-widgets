@@ -135,6 +135,26 @@
       margin-top: 4px;
     }
     .field.has-error .error { display: block; }
+    .field-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin: -2px 0 6px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .form-text-block {
+      padding: 10px 12px;
+      margin: 6px 0 14px;
+      background: #f8fafc;
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      font-size: 0.88rem;
+      line-height: 1.5;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
 
     .field-checkbox {
       display: flex; align-items: center; gap: 8px;
@@ -245,7 +265,7 @@
       text-transform: uppercase;
       letter-spacing: 0.3px;
     }
-    .col-config input, .col-config select {
+    .col-config input, .col-config select, .col-config textarea {
       width: 100%;
       padding: 6px 8px;
       border: 1px solid var(--border);
@@ -253,7 +273,8 @@
       font-size: 0.82rem;
       font-family: inherit;
     }
-    .col-config input:focus, .col-config select:focus {
+    .col-config textarea { min-height: 50px; resize: vertical; line-height: 1.4; }
+    .col-config input:focus, .col-config select:focus, .col-config textarea:focus {
       outline: none; border-color: var(--accent);
     }
     .col-config .full { grid-column: 1 / -1; }
@@ -469,8 +490,9 @@ const state = {
   ready:     false,
   tableId:   null,
   columns:   [],          // [{ colId, label, type, isFormula, formula, widgetOptions, choices }]
-  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique } }
+  validators: {},         // overrides : { [colId]: { format, regex, errorMsg, min, max, minLength, maxLength, unique, customLabel, description } }
   uniqueGroups: [],       // contraintes d'unicité composite : [["Nom","Prenom"], ["Email","Tel"]]
+  textBlocks: [],         // blocs de texte libres dans le formulaire : [{ content, position }]
   validationColumnName: 'Validation',
   // Mode public / standalone (formulaire ouvert hors de Grist)
   server:    null,        // ex. "https://grist.exemple.fr"
@@ -716,9 +738,17 @@ function renderForm() {
   const card = el('div', { class: 'form-card' });
   const form = el('form', { id: 'form', autocomplete: 'off' });
 
+  const blocks = Array.isArray(state.textBlocks) ? state.textBlocks : [];
+  const blocksAt = (pos) => blocks.filter(b => b && b.position === pos);
+
+  for (const b of blocksAt('__top__')) form.appendChild(buildTextBlock(b));
+
   for (const col of state.columns) {
+    for (const b of blocksAt(col.colId)) form.appendChild(buildTextBlock(b));
     form.appendChild(buildField(col));
   }
+
+  for (const b of blocksAt('__bottom__')) form.appendChild(buildTextBlock(b));
 
   const actions = el('div', { class: 'actions' }, [
     el('button', { type: 'reset', class: 'btn' }, 'Réinitialiser'),
@@ -739,22 +769,26 @@ function buildField(col) {
   const fid  = 'f-' + col.colId;
   const wrap = el('div', { class: 'field', 'data-col': col.colId, 'data-type': base });
 
-  // Petit badge de type + indicateur de format
+  // Label affiché (custom > label Grist) + badge de type + indicateur de format
+  const labelText = (ovr.customLabel && String(ovr.customLabel).trim()) || col.label;
   const fmtSuffix = ovr.format && ovr.format !== 'none' ? ` · ${ovr.format}` : '';
   const meta = el('span', { class: 'meta' }, [`(${col.type}${fmtSuffix})`]);
+  const desc = ovr.description && String(ovr.description).trim();
 
   let input;
   if (base === 'Bool') {
     input = el('input', { type: 'checkbox', id: fid });
-    const label = el('label', { for: fid }, [col.label, meta]);
+    const label = el('label', { for: fid }, [labelText, meta]);
     const row = el('div', { class: 'field-checkbox' }, [input, label]);
     wrap.appendChild(row);
+    if (desc) wrap.appendChild(el('div', { class: 'field-desc' }, desc));
     wrap.appendChild(el('div', { class: 'error' }));
     return wrap;
   }
 
   // Label commun
-  wrap.appendChild(el('label', { for: fid }, [col.label, meta]));
+  wrap.appendChild(el('label', { for: fid }, [labelText, meta]));
+  if (desc) wrap.appendChild(el('div', { class: 'field-desc' }, desc));
 
   if (base === 'Choice' && col.choices) {
     input = el('select', { id: fid, name: col.colId });
@@ -803,6 +837,10 @@ function buildField(col) {
   wrap.appendChild(input);
   wrap.appendChild(el('div', { class: 'error' }));
   return wrap;
+}
+
+function buildTextBlock(block) {
+  return el('div', { class: 'form-text-block' }, String(block.content || ''));
 }
 
 function readField(col, fieldEl) {
@@ -1079,6 +1117,29 @@ function renderConfigPanel() {
       el('span', { class: 'type-badge' }, col.type),
     ]));
 
+    // Présentation : label affiché et description (tous types)
+    card.appendChild(el('div', { class: 'row' }, [
+      el('div', { class: 'full' }, [
+        el('label', {}, 'Label affiché (vide = label Grist)'),
+        el('input', {
+          type: 'text', 'data-k': 'customLabel',
+          value: ovr.customLabel || '', placeholder: col.label,
+        }),
+      ]),
+    ]));
+
+    const descTa = el('textarea', {
+      'data-k': 'description', rows: '2',
+      placeholder: 'Ex : format attendu, exemple, consigne…',
+    });
+    descTa.value = ovr.description || '';
+    card.appendChild(el('div', { class: 'row' }, [
+      el('div', { class: 'full' }, [
+        el('label', {}, 'Description / aide (sous le label)'),
+        descTa,
+      ]),
+    ]));
+
     // Format prédéfini (pertinent surtout pour Text/Any)
     if (base === 'Text' || base === 'Any') {
       const row = el('div', { class: 'row' }, [
@@ -1161,9 +1222,106 @@ function renderConfigPanel() {
     body.appendChild(card);
   }
 
+  renderTextBlocksSection(body);
   renderUniqueGroupsSection(body);
   renderValidationColumnSection(body);
   renderPublicLinkSection(body);
+}
+
+function renderTextBlocksSection(body) {
+  body.appendChild(el('div', { class: 'config-section-title' }, "Blocs de texte"));
+
+  const desc = el('div', { class: 'section-desc' });
+  desc.innerHTML =
+    "Insérez des paragraphes libres dans le formulaire (introduction, consignes, " +
+    "séparateurs de section, mentions légales…). Les sauts de ligne sont préservés. " +
+    "La position peut être <em>tout en haut</em>, <em>tout en bas</em>, ou juste avant un champ donné.";
+  body.appendChild(desc);
+
+  const listEl = el('div', { id: 'text-blocks-list', style: 'margin-bottom:8px;' });
+  body.appendChild(listEl);
+  renderTextBlocksList(listEl);
+
+  const addBtn = el('button', { type: 'button', class: 'btn small' }, '+ Ajouter un bloc de texte');
+  addBtn.addEventListener('click', () => {
+    state.textBlocks = [...(state.textBlocks || []), { content: '', position: '__top__' }];
+    renderTextBlocksList(listEl);
+  });
+  body.appendChild(el('div', { class: 'section-actions' }, [addBtn]));
+}
+
+function renderTextBlocksList(container) {
+  container.innerHTML = '';
+  const blocks = state.textBlocks || [];
+  if (blocks.length === 0) {
+    container.appendChild(el('div', { class: 'hint', style: 'margin-bottom:0;' },
+      "Aucun bloc de texte défini."));
+    return;
+  }
+  blocks.forEach((block, idx) => {
+    const card = el('div', {
+      style: 'border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:8px;'
+    });
+
+    const head = el('div', { style: 'display:flex; align-items:center; gap:6px; margin-bottom:8px;' });
+    head.appendChild(el('strong', { style: 'font-size:0.78rem;' }, `Bloc ${idx + 1}`));
+    const rmBtn = el('button', {
+      type: 'button', class: 'btn-icon',
+      style: 'margin-left:auto; padding:2px 6px;', title: 'Supprimer ce bloc'
+    }, '✕');
+    rmBtn.addEventListener('click', () => {
+      state.textBlocks = state.textBlocks.filter((_, i) => i !== idx);
+      renderTextBlocksList(container);
+    });
+    head.appendChild(rmBtn);
+    card.appendChild(head);
+
+    card.appendChild(el('label', {
+      style: 'display:block; font-size:0.72rem; color:var(--muted); margin-bottom:2px; ' +
+             'font-weight:600; text-transform:uppercase; letter-spacing:0.3px;'
+    }, 'Position'));
+
+    const posSelect = el('select', {
+      style: 'width:100%; padding:6px 8px; border:1px solid var(--border); ' +
+             'border-radius:5px; font-size:0.82rem; font-family:inherit; margin-bottom:8px;'
+    });
+    posSelect.appendChild(el('option', { value: '__top__' }, 'Tout en haut du formulaire'));
+    for (const col of state.columns) {
+      posSelect.appendChild(el('option', { value: col.colId },
+        `Avant le champ : ${col.label || col.colId}`));
+    }
+    posSelect.appendChild(el('option', { value: '__bottom__' },
+      'Tout en bas (avant les boutons)'));
+
+    // Si la colonne référencée n'existe plus, on retombe sur __top__
+    const validPositions = new Set(['__top__', '__bottom__', ...state.columns.map(c => c.colId)]);
+    posSelect.value = validPositions.has(block.position) ? block.position : '__top__';
+    if (posSelect.value !== block.position) block.position = posSelect.value;
+    posSelect.addEventListener('change', () => {
+      state.textBlocks[idx].position = posSelect.value;
+    });
+    card.appendChild(posSelect);
+
+    card.appendChild(el('label', {
+      style: 'display:block; font-size:0.72rem; color:var(--muted); margin-bottom:2px; ' +
+             'font-weight:600; text-transform:uppercase; letter-spacing:0.3px;'
+    }, 'Contenu'));
+
+    const ta = el('textarea', {
+      placeholder: 'Texte affiché aux utilisateurs du formulaire…',
+      rows: '3',
+      style: 'width:100%; padding:6px 8px; border:1px solid var(--border); ' +
+             'border-radius:5px; font-size:0.82rem; font-family:inherit; ' +
+             'resize:vertical; min-height:60px; line-height:1.4;'
+    });
+    ta.value = block.content || '';
+    ta.addEventListener('input', () => {
+      state.textBlocks[idx].content = ta.value;
+    });
+    card.appendChild(ta);
+
+    container.appendChild(card);
+  });
 }
 
 function renderUniqueGroupsSection(body) {
@@ -1375,6 +1533,7 @@ async function onGeneratePublicLink(ev) {
   try {
     await grist.setOption('validators',        state.validators);
     await grist.setOption('uniqueGroups',      state.uniqueGroups || []);
+    await grist.setOption('textBlocks',        state.textBlocks || []);
     await grist.setOption('standaloneTitle',   state.standaloneTitle);
     await grist.setOption('standaloneSuccess', state.standaloneSuccess);
     await grist.setOption('docUrl',            state.docUrl);
@@ -1390,6 +1549,7 @@ async function onGeneratePublicLink(ev) {
     })),
     validators:   state.validators,
     uniqueGroups: state.uniqueGroups || [],
+    textBlocks:   state.textBlocks || [],
   };
   const cfgB64 = encodeStandaloneCfg(cfg);
   const pageUrl = window.location.href.split('#')[0].split('?')[0];
@@ -1467,6 +1627,7 @@ async function saveConfig() {
   try {
     await grist.setOption('validators', state.validators);
     await grist.setOption('uniqueGroups', state.uniqueGroups || []);
+    await grist.setOption('textBlocks', state.textBlocks || []);
     await grist.setOption('validationColumnName', state.validationColumnName);
     showToast("Règles enregistrées ✓", 'ok');
     renderForm();   // refresh des inputs (regex maxlength, etc.)
@@ -1682,6 +1843,7 @@ async function bootGrist() {
   $('#btn-config-reset').addEventListener('click', () => {
     state.validators = {};
     state.uniqueGroups = [];
+    state.textBlocks = [];
     renderConfigPanel();
   });
   $('#btn-refresh').addEventListener('click', refresh);
@@ -1692,6 +1854,7 @@ async function bootGrist() {
   grist.onOptions((opts) => {
     state.validators = (opts && opts.validators) || {};
     state.uniqueGroups = (opts && Array.isArray(opts.uniqueGroups)) ? opts.uniqueGroups : [];
+    state.textBlocks   = (opts && Array.isArray(opts.textBlocks))   ? opts.textBlocks   : [];
     state.validationColumnName = (opts && opts.validationColumnName) || 'Validation';
     state.standaloneTitle      = (opts && opts.standaloneTitle)   || 'Formulaire';
     state.standaloneSuccess    = (opts && opts.standaloneSuccess) || 'Merci, votre réponse a été enregistrée.';
@@ -1727,6 +1890,7 @@ async function bootStandalone() {
     state.columns            = cfg.columns || [];
     state.validators         = cfg.validators || {};
     state.uniqueGroups       = Array.isArray(cfg.uniqueGroups) ? cfg.uniqueGroups : [];
+    state.textBlocks         = Array.isArray(cfg.textBlocks)   ? cfg.textBlocks   : [];
     state.standaloneTitle    = cfg.title || 'Formulaire';
     state.standaloneSuccess  = cfg.successMessage || 'Merci, votre réponse a été enregistrée.';
 
