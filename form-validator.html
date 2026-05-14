@@ -315,7 +315,7 @@
     #config-overlay.open { display: flex; }
     #config-panel {
       width: 100%;
-      max-width: 480px;
+      max-width: 720px;
       background: var(--surface);
       box-shadow: -4px 0 16px rgba(0,0,0,0.1);
       display: flex;
@@ -553,6 +553,148 @@
     #toast.err { background: var(--bad); }
 
     .req-mark { color: var(--bad); margin-left: 2px; }
+
+    /* ── Champ requis : étoile ── */
+    .required-mark { color: var(--bad); margin-left: 3px; font-weight: 700; }
+
+    /* ── Indicateur de statut à droite du label (✓ / ✗) ── */
+    .field-status { font-size: 0.95rem; font-weight: 700; margin-left: 6px; }
+    .field.has-success .field-status { color: var(--good); }
+    .field.has-error   .field-status { color: var(--bad); }
+    .field.has-success input,
+    .field.has-success select,
+    .field.has-success textarea {
+      border-color: var(--good);
+      background: var(--good-bg);
+    }
+
+    /* ── Compteur de caractères ── */
+    .char-counter {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-align: right;
+      margin-top: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+    .char-counter.warn   { color: var(--warn); }
+    .char-counter.exceed { color: var(--bad); font-weight: 700; }
+
+    /* ── Barre de progression ── */
+    .form-progress {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+    .form-progress-text {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .form-progress-text strong { color: var(--text); font-weight: 700; }
+    .form-progress-bar {
+      height: 5px;
+      background: #e2e8f0;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .form-progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 0.25s ease;
+      border-radius: 3px;
+    }
+
+    /* ── Choice : radio buttons (≤ 5 choix) ── */
+    .choice-radio-group { display: flex; flex-direction: column; gap: 6px; }
+    .choice-radio {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 7px;
+      cursor: pointer;
+      background: var(--surface);
+      transition: all 0.12s;
+    }
+    .choice-radio:hover { border-color: var(--accent); }
+    .choice-radio input[type="radio"] {
+      width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--accent);
+    }
+    .choice-radio span { font-size: 0.88rem; color: var(--text); user-select: none; }
+    .choice-radio.selected { border-color: var(--accent); background: var(--aclt); }
+
+    /* ── ChoiceList : chips/pills ── */
+    .chip-group { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
+    .chip {
+      display: inline-block;
+      padding: 6px 13px;
+      border: 1.5px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      user-select: none;
+      background: var(--surface);
+      color: var(--text);
+      transition: all 0.12s;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--accent); }
+    .chip.selected { background: var(--accent); border-color: var(--accent); color: white; }
+    .chip.selected:hover { background: #1d4ed8; color: white; }
+
+    /* ── Drag-and-drop dans le panneau de config ── */
+    .col-config { position: relative; }
+    .col-config.dragging { opacity: 0.4; }
+    .col-config.drag-over {
+      border-color: var(--accent);
+      border-style: dashed;
+      background: var(--aclt);
+    }
+    .drag-handle {
+      position: absolute;
+      top: 10px; left: -2px;
+      width: 18px;
+      cursor: grab;
+      color: var(--muted);
+      font-size: 1rem; line-height: 1;
+      user-select: none;
+      text-align: center;
+    }
+    .drag-handle:hover { color: var(--accent); }
+    .drag-handle:active { cursor: grabbing; }
+    .col-config-head, .col-config .row, .col-config .hint { padding-left: 18px; }
+
+    /* ── Toggles "inclure" et "requis" dans le panneau ── */
+    .col-include-row, .col-required-row {
+      display: flex; align-items: center; gap: 8px;
+      padding-left: 18px;
+    }
+    .col-include-row {
+      margin-top: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--border);
+      margin-bottom: 8px;
+    }
+    .col-required-row { margin: 6px 0 4px; }
+    .col-include-row label,
+    .col-required-row label {
+      font-size: 0.75rem !important;
+      text-transform: none !important;
+      letter-spacing: 0 !important;
+      margin-bottom: 0 !important;
+      cursor: pointer;
+    }
+    .col-include-row label { color: var(--muted); font-weight: 500 !important; }
+    .col-required-row label { color: var(--text);  font-weight: 600 !important; }
+    .col-include-row input[type="checkbox"],
+    .col-required-row input[type="checkbox"] {
+      width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent);
+    }
+    .col-config.excluded { opacity: 0.55; background: #fafafa; }
   </style>
 </head>
 <body>
@@ -983,6 +1125,118 @@ function moveField(colId, direction) {
 }
 
 //
+// ─── Helpers UX (placeholders, chips, temps réel, progrès) ─────────────────
+//
+function isEmptyValue(v) {
+  if (v === null || v === undefined) return true;
+  if (v === false) return true;                                    // Bool décoché = non rempli
+  if (typeof v === 'string' && v.trim() === '') return true;
+  if (Array.isArray(v) && v.length === 0) return true;
+  return false;
+}
+
+function smartPlaceholder(col, ovr) {
+  if (ovr && ovr.format === 'email') return 'nom.prenom@exemple.fr';
+  if (ovr && ovr.format === 'phone') return '06 12 34 56 78';
+  if (ovr && ovr.format === 'url')   return 'https://www.exemple.fr';
+  return null;
+}
+
+function buildChipGroup(col, fid, options) {
+  const group = el('div', { class: 'chip-group', id: fid, 'data-multi': '1' });
+  if (!options || options.length === 0) {
+    group.appendChild(el('div', { class: 'field-options-empty' },
+      'Aucune valeur disponible.'));
+    return group;
+  }
+  options.forEach((opt) => {
+    const chip = el('span', {
+      class: 'chip',
+      'data-val': opt.value,
+      role: 'button',
+      tabindex: '0',
+      'aria-pressed': 'false',
+    }, opt.label);
+    const toggle = () => {
+      chip.classList.toggle('selected');
+      chip.setAttribute('aria-pressed', chip.classList.contains('selected') ? 'true' : 'false');
+      group.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    chip.addEventListener('click', toggle);
+    chip.addEventListener('keydown', (e) => {
+      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); }
+    });
+    group.appendChild(chip);
+  });
+  return group;
+}
+
+function attachRealtimeValidation(wrap, col) {
+  const inputs = wrap.querySelectorAll('input, select, textarea, .chip-group');
+  inputs.forEach(inp => {
+    inp.addEventListener('blur', () => {
+      wrap.dataset.touched = '1';
+      revalidateField(col, wrap);
+    });
+    inp.addEventListener('change', () => {
+      wrap.dataset.touched = '1';
+      revalidateField(col, wrap);
+    });
+    inp.addEventListener('input', () => {
+      if (wrap.dataset.touched === '1') revalidateField(col, wrap);
+    });
+  });
+}
+
+function revalidateField(col, wrap) {
+  const raw = readField(col, wrap);
+  const { error } = validateField(col, raw);
+  const status = wrap.querySelector('.field-status');
+  const errEl  = wrap.querySelector('.error');
+  if (error) {
+    wrap.classList.add('has-error');
+    wrap.classList.remove('has-success');
+    if (errEl) errEl.textContent = error;
+    if (status) status.textContent = '✗';
+  } else {
+    wrap.classList.remove('has-error');
+    if (errEl) errEl.textContent = '';
+    if (!isEmptyValue(raw)) {
+      wrap.classList.add('has-success');
+      if (status) status.textContent = '✓';
+    } else {
+      wrap.classList.remove('has-success');
+      if (status) status.textContent = '';
+    }
+  }
+}
+
+function updateProgress() {
+  const progressEl = document.getElementById('form-progress');
+  if (!progressEl) return;
+  const fields = Array.from(document.querySelectorAll('.field[data-col]'))
+    .filter(f => f.offsetParent !== null);   // exclut les champs masqués par showIf
+  let filled = 0;
+  for (const wrap of fields) {
+    const colId = wrap.dataset.col;
+    const col = state.columns.find(c => c.colId === colId);
+    if (!col) continue;
+    try {
+      const raw = readField(col, wrap);
+      if (!isEmptyValue(raw)) filled++;
+    } catch (e) { /* champ pas encore prêt */ }
+  }
+  const total = fields.length;
+  const pct = total ? Math.round(filled / total * 100) : 0;
+  const lbl = document.getElementById('form-progress-label');
+  const pctEl = document.getElementById('form-progress-percent');
+  const fill = document.getElementById('form-progress-fill');
+  if (lbl)   lbl.innerHTML = `<strong>${filled}</strong> / ${total} champ${total > 1 ? 's' : ''} renseigné${filled > 1 ? 's' : ''}`;
+  if (pctEl) pctEl.textContent = pct + '%';
+  if (fill)  fill.style.width = pct + '%';
+}
+
+//
 // ─── Validation ────────────────────────────────────────────────────────────
 //
 // Retourne { value, error } : value = valeur convertie pour Grist, error = message ou null
@@ -1164,12 +1418,30 @@ function renderForm() {
   const card = el('div', { class: 'form-card' });
   const form = el('form', { id: 'form', autocomplete: 'off' });
 
+  // Barre de progression (champs renseignés / total visibles)
+  const progress = el('div', { class: 'form-progress', id: 'form-progress' }, [
+    el('div', { class: 'form-progress-text' }, [
+      el('span', { id: 'form-progress-label' }, '0 / 0 champs renseignés'),
+      el('span', { id: 'form-progress-percent' }, '0%'),
+    ]),
+    el('div', { class: 'form-progress-bar' }, [
+      el('div', { class: 'form-progress-bar-fill', id: 'form-progress-fill' }),
+    ]),
+  ]);
+  form.appendChild(progress);
+
   const blocks = Array.isArray(state.textBlocks) ? state.textBlocks : [];
   const blocksAt = (pos) => blocks.filter(b => b && b.position === pos);
 
+  // Ne génère que les colonnes incluses dans le formulaire (included !== false)
+  const formCols = state.columns.filter(c => {
+    const ovr = state.validators[c.colId] || {};
+    return ovr.included !== false;
+  });
+
   for (const b of blocksAt('__top__')) form.appendChild(buildTextBlock(b));
 
-  for (const col of state.columns) {
+  for (const col of formCols) {
     for (const b of blocksAt(col.colId)) form.appendChild(buildTextBlock(b));
     form.appendChild(buildField(col));
   }
@@ -1189,18 +1461,42 @@ function renderForm() {
     document.querySelectorAll('.field-ac').forEach(ac => {
       if (typeof ac._reset === 'function') ac._reset();
     });
+    // Désélectionne les chips et nettoie les états temps réel
+    document.querySelectorAll('.chip.selected').forEach(c => {
+      c.classList.remove('selected');
+      c.setAttribute('aria-pressed', 'false');
+    });
+    document.querySelectorAll('.field').forEach(f => {
+      f.classList.remove('has-success', 'has-error');
+      delete f.dataset.touched;
+      const st = f.querySelector('.field-status');
+      if (st) st.textContent = '';
+      const cnt = f.querySelector('.char-counter');
+      if (cnt) { cnt.textContent = cnt.dataset.empty || ''; cnt.classList.remove('warn', 'exceed'); }
+    });
     applyConditions();
+    updateProgress();
   }, 0));
 
-  // Logique conditionnelle : on ré-évalue à chaque saisie/changement
-  form.addEventListener('input',  applyConditions);
-  form.addEventListener('change', applyConditions);
+  // Logique conditionnelle + progression : on ré-évalue à chaque saisie/changement
+  const onMutate = () => { applyConditions(); updateProgress(); };
+  form.addEventListener('input',  onMutate);
+  form.addEventListener('change', onMutate);
 
   card.appendChild(form);
   host.appendChild(card);
 
   // Passe initiale (toutes les valeurs vides → on cache les champs conditionnels)
   applyConditions();
+  updateProgress();
+
+  // Auto-focus du premier champ texte en mode standalone
+  if (STANDALONE) {
+    const firstInput = form.querySelector(
+      'input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea'
+    );
+    if (firstInput) firstInput.focus();
+  }
 }
 
 function buildField(col) {
@@ -1209,13 +1505,14 @@ function buildField(col) {
   const fid  = 'f-' + col.colId;
   const wrap = el('div', { class: 'field', 'data-col': col.colId, 'data-type': base });
 
-  // Label affiché (custom > label Grist) + astérisque si obligatoire + badge de type
+  // Label affiché (custom > label Grist) + astérisque si obligatoire + badge de type + statut ✓/✗
   const labelText = (ovr.customLabel && String(ovr.customLabel).trim()) || col.label;
   const fmtSuffix = ovr.format && ovr.format !== 'none' ? ` · ${ovr.format}` : '';
   const meta = el('span', { class: 'meta' }, [`(${col.type}${fmtSuffix})`]);
   const desc = ovr.description && String(ovr.description).trim();
   const reqMark = ovr.required ? el('span', { class: 'req-mark', title: 'Champ obligatoire' }, '*') : null;
-  const labelChildren = reqMark ? [labelText, reqMark, meta] : [labelText, meta];
+  const status  = el('span', { class: 'field-status', 'aria-live': 'polite' }, '');
+  const labelChildren = reqMark ? [labelText, reqMark, meta, status] : [labelText, meta, status];
 
   let input;
   if (base === 'Bool') {
@@ -1225,6 +1522,7 @@ function buildField(col) {
     wrap.appendChild(row);
     if (desc) wrap.appendChild(el('div', { class: 'field-desc' }, desc));
     wrap.appendChild(el('div', { class: 'error' }));
+    attachRealtimeValidation(wrap, col);
     return wrap;
   }
 
@@ -1232,49 +1530,54 @@ function buildField(col) {
   wrap.appendChild(el('label', { for: fid }, labelChildren));
   if (desc) wrap.appendChild(el('div', { class: 'field-desc' }, desc));
 
-  const widgetPref = ovr.widget || 'select';
-  const isOptionField = ['Choice', 'ChoiceList', 'Ref', 'RefList'].includes(base);
-  const isMultiField  = base === 'ChoiceList' || base === 'RefList';
-  const useRadio    = isOptionField && !isMultiField && widgetPref === 'radio';
-  const useCheckbox = isOptionField &&  isMultiField && widgetPref === 'checkbox';
+  // 'auto' = nouveau défaut intelligent (radio si peu d'options, chips pour multi)
+  const widgetPref = ovr.widget || 'auto';
+  const isOptionField   = ['Choice', 'ChoiceList', 'Ref', 'RefList'].includes(base);
+  const isMultiField    = base === 'ChoiceList' || base === 'RefList';
+  const optsForCol      = isOptionField ? getFieldOptions(col) : [];
   const useAutocomplete = isOptionField && widgetPref === 'autocomplete';
+  const useExplicitRadio    = isOptionField && !isMultiField && widgetPref === 'radio';
+  const useExplicitCheckbox = isOptionField &&  isMultiField && widgetPref === 'checkbox';
+  const useExplicitSelect   = isOptionField &&  widgetPref === 'select';
+  // Auto-radio pour Choice/Ref avec ≤ 5 options, sinon select
+  const useAutoRadio = isOptionField && !isMultiField && widgetPref === 'auto'
+                       && optsForCol.length > 0 && optsForCol.length <= 5;
+  // Auto-chips pour ChoiceList/RefList par défaut
+  const useAutoChips = isOptionField && isMultiField && widgetPref === 'auto';
 
   if (useAutocomplete) {
-    input = buildAutocomplete(col, fid, isMultiField, getFieldOptions(col));
+    input = buildAutocomplete(col, fid, isMultiField, optsForCol);
   }
-  else if (useRadio || useCheckbox) {
-    input = buildOptionGroup(col, fid, useRadio ? 'radio' : 'checkbox', getFieldOptions(col));
+  else if (useExplicitRadio || useAutoRadio) {
+    input = buildOptionGroup(col, fid, 'radio',    optsForCol);
   }
-  else if (base === 'Choice' && col.choices) {
-    input = el('select', { id: fid, name: col.colId });
-    input.appendChild(el('option', { value: '' }, '— sélectionner —'));
-    for (const c of col.choices) input.appendChild(el('option', { value: c }, c));
+  else if (useExplicitCheckbox) {
+    input = buildOptionGroup(col, fid, 'checkbox', optsForCol);
   }
-  else if (base === 'ChoiceList' && col.choices) {
-    input = el('select', { id: fid, name: col.colId, multiple: 'multiple', size: Math.min(col.choices.length, 5) });
-    for (const c of col.choices) input.appendChild(el('option', { value: c }, c));
+  else if (useAutoChips) {
+    input = buildChipGroup(col, fid, optsForCol);
   }
-  else if (base === 'Ref') {
-    const options = Array.isArray(col.refOptions) ? col.refOptions : [];
+  else if (isOptionField && !isMultiField && (useExplicitSelect || optsForCol.length > 5)) {
+    // Select pour Choice/Ref (explicite, ou auto avec > 5 options)
     input = el('select', { id: fid, name: col.colId });
     input.appendChild(el('option', { value: '' },
-      options.length ? '— sélectionner —' : '— aucune valeur disponible —'));
-    for (const opt of options) {
-      input.appendChild(el('option', { value: String(opt.id) }, opt.display || String(opt.id)));
+      optsForCol.length ? '— sélectionner —' : '— aucune valeur disponible —'));
+    for (const opt of optsForCol) {
+      input.appendChild(el('option', { value: opt.value }, opt.label));
     }
   }
-  else if (base === 'RefList') {
-    const options = Array.isArray(col.refOptions) ? col.refOptions : [];
+  else if (isOptionField && isMultiField && useExplicitSelect) {
+    // Select multiple pour ChoiceList/RefList (uniquement si explicitement demandé)
     input = el('select', {
       id: fid, name: col.colId, multiple: 'multiple',
-      size: Math.min(Math.max(options.length, 2), 6),
+      size: Math.min(Math.max(optsForCol.length, 2), 6),
     });
-    if (options.length === 0) {
+    if (optsForCol.length === 0) {
       input.appendChild(el('option', { value: '', disabled: 'disabled' },
         '— aucune valeur disponible —'));
     }
-    for (const opt of options) {
-      input.appendChild(el('option', { value: String(opt.id) }, opt.display || String(opt.id)));
+    for (const opt of optsForCol) {
+      input.appendChild(el('option', { value: opt.value }, opt.label));
     }
   }
   else if (base === 'Date') {
@@ -1312,8 +1615,33 @@ function buildField(col) {
     }
   }
 
+  // Placeholder intelligent (email / téléphone / URL) si non déjà défini
+  const ph = smartPlaceholder(col, ovr);
+  if (ph && input.tagName === 'INPUT'
+        && ['text', 'email', 'tel', 'url'].includes(input.type)
+        && !input.getAttribute('placeholder')) {
+    input.setAttribute('placeholder', ph);
+  }
+
   wrap.appendChild(input);
+
+  // Compteur de caractères pour les inputs avec maxLength
+  if ((input.tagName === 'INPUT' || input.tagName === 'TEXTAREA') && input.getAttribute('maxlength')) {
+    const max = Number(input.getAttribute('maxlength'));
+    const counter = el('div', { class: 'char-counter' }, `0 / ${max}`);
+    counter.dataset.empty = `0 / ${max}`;
+    const refresh = () => {
+      const len = (input.value || '').length;
+      counter.textContent = `${len} / ${max}`;
+      counter.classList.toggle('warn',   len >= Math.floor(max * 0.85) && len < max);
+      counter.classList.toggle('exceed', len >= max);
+    };
+    input.addEventListener('input', refresh);
+    wrap.appendChild(counter);
+  }
+
   wrap.appendChild(el('div', { class: 'error' }));
+  attachRealtimeValidation(wrap, col);
   return wrap;
 }
 
@@ -1528,12 +1856,19 @@ function buildAutocomplete(col, fid, isMulti, options) {
 
 function readField(col, fieldEl) {
   const base = baseTypeOf(col.type);
-  const ovr  = state.validators[col.colId] || {};
   if (base === 'Bool') return fieldEl.querySelector('input[type="checkbox"]').checked;
 
-  // Auto-complétion (Choice/ChoiceList/Ref/RefList en mode "autocomplete")
-  if (ovr.widget === 'autocomplete' &&
-      (base === 'Choice' || base === 'Ref' || base === 'ChoiceList' || base === 'RefList')) {
+  // Détection par STRUCTURE du champ (plus robuste que par préférence de widget) :
+  // un champ Multi rendu en chips, ou en groupe options radio/checkbox, ou en autocomplete.
+  const chipGroup = fieldEl.querySelector('.chip-group');
+  if (chipGroup) {
+    return Array.from(chipGroup.querySelectorAll('.chip.selected'))
+      .map(c => c.dataset.val);
+  }
+
+  // Auto-complétion (Choice/ChoiceList/Ref/RefList)
+  const acRoot = fieldEl.querySelector('.field-ac');
+  if (acRoot) {
     if (base === 'ChoiceList' || base === 'RefList') {
       return Array.from(fieldEl.querySelectorAll('.field-ac-chip[data-id]'))
         .map(c => c.dataset.id);
@@ -1542,19 +1877,20 @@ function readField(col, fieldEl) {
     return hidden ? hidden.value : '';
   }
 
-  // Boutons radio (Choice / Ref en mode "radio")
-  if (ovr.widget === 'radio' && (base === 'Choice' || base === 'Ref')) {
-    const checked = fieldEl.querySelector('.field-options-group input[type="radio"]:checked');
+  // Boutons radio / cases à cocher
+  const optionsGroup = fieldEl.querySelector('.field-options-group');
+  if (optionsGroup) {
+    if (base === 'ChoiceList' || base === 'RefList') {
+      return Array.from(optionsGroup.querySelectorAll('input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+    }
+    const checked = optionsGroup.querySelector('input[type="radio"]:checked');
     return checked ? checked.value : '';
-  }
-  // Cases à cocher (ChoiceList / RefList en mode "checkbox")
-  if (ovr.widget === 'checkbox' && (base === 'ChoiceList' || base === 'RefList')) {
-    return Array.from(fieldEl.querySelectorAll('.field-options-group input[type="checkbox"]:checked'))
-      .map(cb => cb.value);
   }
 
   if (base === 'ChoiceList' || base === 'RefList') {
     const sel = fieldEl.querySelector('select');
+    if (!sel) return [];
     return Array.from(sel.selectedOptions)
       .map(o => o.value)
       .filter(v => v !== '');
@@ -1882,13 +2218,17 @@ function renderConfigPanel() {
       ]),
     ]));
 
-    // Apparence : menu déroulant / radio / cases à cocher
+    // Apparence : menu déroulant / radio / chips / cases à cocher / auto-complétion
     if (base === 'Choice' || base === 'Ref' || base === 'ChoiceList' || base === 'RefList') {
       const isMulti = (base === 'ChoiceList' || base === 'RefList');
       const choices = isMulti
-        ? [['select', 'Menu déroulant (multi)'], ['checkbox', 'Cases à cocher'],
+        ? [['auto',         'Auto · chips cliquables (conseillé)'],
+           ['select',       'Menu déroulant (multi)'],
+           ['checkbox',     'Cases à cocher'],
            ['autocomplete', 'Auto-complétion (recherche + sélection multiple)']]
-        : [['select', 'Menu déroulant'],          ['radio',    'Boutons radio'],
+        : [['auto',         'Auto · radio si ≤ 5 choix, sinon menu'],
+           ['select',       'Menu déroulant'],
+           ['radio',        'Boutons radio'],
            ['autocomplete', 'Auto-complétion (tapez le début pour filtrer)']];
       card.appendChild(el('div', { class: 'row' }, [
         el('div', { class: 'full' }, [
@@ -1897,7 +2237,7 @@ function renderConfigPanel() {
             const sel = el('select', { 'data-k': 'widget' });
             for (const [val, lbl] of choices) {
               const opt = el('option', { value: val }, lbl);
-              if ((ovr.widget || 'select') === val) opt.selected = true;
+              if ((ovr.widget || 'auto') === val) opt.selected = true;
               sel.appendChild(opt);
             }
             return sel;
@@ -1989,10 +2329,33 @@ function renderConfigPanel() {
         "Validation automatique selon le type Grist. Pas de surcharge supplémentaire pour ce type."));
     }
 
-    // Case "Champ obligatoire" — disponible pour tous les types
-    const reqWrap = el('div', {
+    // Case "Inclure dans le formulaire" — décoché = la colonne n'apparaît pas pour le saisisseur
+    const incWrap = el('div', {
       style: 'margin-top:10px; padding-top:8px; border-top:1px dashed var(--border); ' +
              'display:flex; align-items:center; gap:6px;'
+    });
+    const incCb = el('input', { type: 'checkbox', 'data-k': 'included', id: 'inc-' + col.colId });
+    // included est vrai par défaut (undefined ou true = inclus, false = exclu)
+    incCb.checked = ovr.included !== false;
+    const incLbl = el('label', {
+      for: 'inc-' + col.colId,
+      style: 'cursor:pointer; font-size:0.78rem; color:var(--text); margin:0; ' +
+             'text-transform:none; letter-spacing:0; font-weight:500;'
+    }, 'Inclure ce champ dans le formulaire');
+    incWrap.appendChild(incCb);
+    incWrap.appendChild(incLbl);
+    card.appendChild(incWrap);
+
+    // Marque visuellement la carte si la colonne est exclue
+    if (ovr.included === false) card.classList.add('excluded');
+    // Réagit en direct au cocher/décocher pour mettre à jour le style de la carte
+    incCb.addEventListener('change', () => {
+      card.classList.toggle('excluded', !incCb.checked);
+    });
+
+    // Case "Champ obligatoire" — disponible pour tous les types
+    const reqWrap = el('div', {
+      style: 'margin-top:6px; display:flex; align-items:center; gap:6px;'
     });
     const reqCb = el('input', { type: 'checkbox', 'data-k': 'required', id: 'req-' + col.colId });
     reqCb.checked = !!ovr.required;
@@ -2424,6 +2787,9 @@ function readConfigPanel() {
       const k = input.dataset.k;
       if (input.type === 'checkbox') {
         if (input.checked) cfg[k] = true;
+        // 'included' a un défaut "true" : décoché doit explicitement stocker false
+        // pour distinguer "exclu" (false) de "non configuré" (undefined → true)
+        else if (k === 'included') cfg[k] = false;
         return;
       }
       const v = input.value;
