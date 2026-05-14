@@ -696,6 +696,39 @@
     }
     .col-config.excluded { opacity: 0.55; background: #fafafa; }
 
+    /* ── Groupe de cases binaires en bas de la carte colonne ── */
+    .col-flags {
+      margin-top: 12px;
+      padding-top: 10px;
+      padding-left: 18px;
+      border-top: 1px dashed var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .col-flag {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      cursor: pointer;
+      /* Override les rules génériques de .col-config label */
+      font-size: 0.78rem !important;
+      color: var(--text) !important;
+      font-weight: 500 !important;
+      text-transform: none !important;
+      letter-spacing: 0 !important;
+      margin: 0 !important;
+      line-height: 1.4;
+    }
+    .col-flag input[type="checkbox"] {
+      width: 14px; height: 14px;
+      margin: 0; margin-top: 2px;
+      cursor: pointer;
+      accent-color: var(--accent);
+      flex-shrink: 0;
+    }
+    .col-flag span { user-select: none; }
+
     /* ── Bandeau de préférences (haut du panneau ⚙) ── */
     .feature-toggles {
       background: #eff6ff;
@@ -2432,59 +2465,38 @@ function renderConfigPanel() {
       }
     }
 
-    // Case "Inclure dans le formulaire" — décoché = la colonne n'apparaît pas pour le saisisseur
-    const incWrap = el('div', {
-      style: 'margin-top:10px; padding-top:8px; border-top:1px dashed var(--border); ' +
-             'display:flex; align-items:center; gap:6px;'
-    });
-    const incCb = el('input', { type: 'checkbox', 'data-k': 'included', id: 'inc-' + col.colId });
-    // included est vrai par défaut (undefined ou true = inclus, false = exclu)
-    incCb.checked = ovr.included !== false;
-    const incLbl = el('label', {
-      for: 'inc-' + col.colId,
-      style: 'cursor:pointer; font-size:0.78rem; color:var(--text); margin:0; ' +
-             'text-transform:none; letter-spacing:0; font-weight:500;'
-    }, 'Inclure ce champ dans le formulaire');
-    incWrap.appendChild(incCb);
-    incWrap.appendChild(incLbl);
-    card.appendChild(incWrap);
+    // ── Groupe des 3 cases binaires (inclure / obligatoire / unique) ─────
+    // Pattern : <label class="col-flag">[checkbox][texte]</label> — clic n'importe où
+    // dans le label toggle la case, et tout est aligné proprement à gauche.
+    const incCb = el('input', { type: 'checkbox', 'data-k': 'included' });
+    incCb.checked = ovr.included !== false;        // défaut : inclus
 
-    // Marque visuellement la carte si la colonne est exclue
+    const reqCb = el('input', { type: 'checkbox', 'data-k': 'required' });
+    reqCb.checked = !!ovr.required;
+
+    const uniqCb = el('input', { type: 'checkbox', 'data-k': 'unique' });
+    uniqCb.checked = !!ovr.unique;
+
+    card.appendChild(el('div', { class: 'col-flags' }, [
+      el('label', { class: 'col-flag' }, [
+        incCb,
+        el('span', {}, 'Inclure ce champ dans le formulaire'),
+      ]),
+      el('label', { class: 'col-flag' }, [
+        reqCb,
+        el('span', {}, 'Champ obligatoire (doit être renseigné)'),
+      ]),
+      el('label', { class: 'col-flag' }, [
+        uniqCb,
+        el('span', {}, 'Interdire les doublons (valeur unique dans la table)'),
+      ]),
+    ]));
+
+    // Carte grisée si la colonne est exclue, mise à jour en direct
     if (ovr.included === false) card.classList.add('excluded');
-    // Réagit en direct au cocher/décocher pour mettre à jour le style de la carte
     incCb.addEventListener('change', () => {
       card.classList.toggle('excluded', !incCb.checked);
     });
-
-    // Case "Champ obligatoire" — disponible pour tous les types
-    const reqWrap = el('div', {
-      style: 'margin-top:6px; display:flex; align-items:center; gap:6px;'
-    });
-    const reqCb = el('input', { type: 'checkbox', 'data-k': 'required', id: 'req-' + col.colId });
-    reqCb.checked = !!ovr.required;
-    const reqLbl = el('label', {
-      for: 'req-' + col.colId,
-      style: 'cursor:pointer; font-size:0.78rem; color:var(--text); margin:0; ' +
-             'text-transform:none; letter-spacing:0; font-weight:500;'
-    }, 'Champ obligatoire (doit être renseigné)');
-    reqWrap.appendChild(reqCb);
-    reqWrap.appendChild(reqLbl);
-    card.appendChild(reqWrap);
-
-    // Case "Interdire les doublons" — disponible pour tous les types
-    const uniqWrap = el('div', {
-      style: 'margin-top:6px; display:flex; align-items:center; gap:6px;'
-    });
-    const uniqCb = el('input', { type: 'checkbox', 'data-k': 'unique', id: 'unq-' + col.colId });
-    uniqCb.checked = !!ovr.unique;
-    const uniqLbl = el('label', {
-      for: 'unq-' + col.colId,
-      style: 'cursor:pointer; font-size:0.78rem; color:var(--text); margin:0; ' +
-             'text-transform:none; letter-spacing:0; font-weight:500;'
-    }, 'Interdire les doublons (valeur unique dans la table)');
-    uniqWrap.appendChild(uniqCb);
-    uniqWrap.appendChild(uniqLbl);
-    card.appendChild(uniqWrap);
 
     body.appendChild(card);
   });
