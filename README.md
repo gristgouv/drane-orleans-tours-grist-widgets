@@ -1,93 +1,121 @@
-# Widget-GRIT
+# Widget-Grist
 
+Collection de widgets personnalisés pour [Grist](https://www.getgrist.com/), développée par la DRANE d'Orléans-Tours. Chaque widget est un fichier HTML autonome à coller comme « Widget personnalisé » dans Grist (URL).
 
+Catalogue complet : ouvrez [`index.html`](index.html) en local ou via votre déploiement GitLab Pages — il liste les widgets et permet de copier directement l'URL à coller dans Grist.
 
-## Getting started
+## Widgets disponibles
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+| Widget | Fichier | Description courte |
+|---|---|---|
+| **Formulaire validé** | [`form-validator.html`](form-validator.html) | Formulaire de saisie avec validation. **Voir détail ci-dessous.** |
+| Assistant Dataviz D3.js | [`d3js-assistant.html`](d3js-assistant.html) | Parcours guidé pour choisir le bon graphique D3.js. |
+| Scatterplot D3.js | [`d3js-scatterplot.html`](d3js-scatterplot.html) | Nuage de points configurable. |
+| Donut D3.js | [`d3js-donut.html`](d3js-donut.html) | Graphique donut configurable. |
+| Bar Chart D3.js | [`d3js-bar-chart.html`](d3js-bar-chart.html) | Diagramme en barres configurable. |
+| Radar D3.js | [`d3js-radar.html`](d3js-radar.html) | Radar / toile d'araignée configurable. |
+| Catalogue / Galerie de fiches | [`widget-cards.html`](widget-cards.html) | Affichage des lignes Grist en cartes (recherche, filtres, vue détail). |
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+---
 
-## Add your files
+# Widget **Formulaire validé** (form-validator)
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+Transforme une table Grist en formulaire de saisie avec validation des données avant insertion. Trois modes d'usage, combinables.
 
-```
-cd existing_repo
-git remote add origin https://forge.apps.education.fr/drane-orleans-tours/widget-grit.git
-git branch -M main
-git push -uf origin main
-```
+## Modes d'usage
 
-## Integrate with your tools
+### Mode 1 — Saisie validée par un éditeur Grist connecté
+- Ajoutez le widget sur une table dans Grist (URL → `form-validator.html`, accès **Full**).
+- Le widget génère automatiquement un formulaire à partir du schéma de la table.
+- L'éditeur saisit, le widget valide (regex, types, longueur, etc.), puis insère via `grist.selectedTable.create`.
+- Cas d'usage : interface de saisie ergonomique pour les agents internes, plus stricte que la grille Grist par défaut.
 
-* [Set up project integrations](https://forge.apps.education.fr/drane-orleans-tours/widget-grit/-/settings/integrations)
+### Mode 2 — Validation post-hoc d'un formulaire Grist natif
+- Vous gardez le **formulaire Grist natif** (publié) pour la collecte publique (qui se fait sans login).
+- Depuis le panneau ⚙ du widget, cliquez sur **« Créer / Mettre à jour la colonne de validation »** : ça génère une **colonne formule Python** qui rejoue les mêmes règles que celles configurées dans le widget.
+- Toute ligne ajoutée à la table (par n'importe quel canal, y compris le formulaire natif) a sa colonne `Validation` calculée : `''` si tout est valide, sinon le détail des erreurs.
+- Cas d'usage : feedback de qualité côté éditeur Grist sans complexifier le formulaire vu par le visiteur.
 
-## Collaborate with your team
+### Mode 3 — Lien public autonome (visiteur non connecté)
+- Le widget peut s'ouvrir **hors de Grist** via une URL spéciale (`form-validator.html#cfg=…`).
+- Le bandeau « Lien public » dans le panneau ⚙ génère cette URL : elle contient en base64 le titre, le schéma, les règles de validation, le message de succès et l'URL du document Grist.
+- Quand un visiteur ouvre le lien : formulaire affiché, validation locale, soumission via `POST /api/docs/{docId}/tables/{tableId}/records?utm_source=grist-forms` (endpoint REST standard de Grist).
+- **Pré-requis côté Grist** : voir [Access Rules pour le mode public](#access-rules-pour-le-mode-public). Sans ça, l'INSERT anonyme est refusé.
+- Cas d'usage : formulaire public hors d'un formulaire Grist natif, par exemple intégré sur un site qui n'a pas accès à Grist.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## Fonctionnalités
 
-## Test and Deploy
+### Validation automatique par type
+Détection des types Grist : `Text`, `Numeric`, `Int`, `Date`, `DateTime`, `Bool`, `Choice`, `ChoiceList`, `Ref`, `RefList`. La validation de type est appliquée d'office (un nombre dans un champ `Numeric`, une date valide dans `Date`, une référence existante pour `Ref`, etc.).
 
-Use the built-in continuous integration in GitLab.
+### Surcharges par colonne (panneau ⚙)
+Pour chaque colonne, configurez :
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+| Option | Effet |
+|---|---|
+| **Label affiché** | Override le nom Grist visible dans le formulaire. |
+| **Description / aide** | Texte d'aide sous le label. |
+| **Apparence** | `auto` (défaut), `select`, `radio`, `chips`, `checkbox`, `autocomplete`. |
+| **Format prédéfini** | `email`, `phone`, `url` (avec regex et message par défaut). |
+| **Regex personnalisée** | Pattern JS, prioritaire sur le format. |
+| **Valeur min / max** | Bornes pour `Numeric` / `Int`. |
+| **Longueur min / max** | Bornes pour `Text` / `Any`. |
+| **Message d'erreur** | Override le message par défaut. |
+| **Filtre des valeurs** (`Ref`/`RefList`) | Limite les options proposées (ex. `choice.Statut == 'Actif'`). |
+| **Logique conditionnelle** (`showIf`) | Le champ ne s'affiche que si une condition est vraie (ex. `form.Type == 'Particulier'`). |
+| **Inclure dans le formulaire** | Décocher = la colonne reste dans la table mais n'apparaît pas pour le saisisseur. |
+| **Champ obligatoire** | Vide → erreur (sauf pour `Bool` où ça signifie « doit être coché »). |
+| **Interdire les doublons** | Refuse une valeur déjà présente dans la table (vérification au moment de la soumission). |
 
-***
+### Contraintes composites & blocs de texte
+- **Contraintes d'unicité composites** : un groupe de colonnes ne peut pas avoir la même combinaison de valeurs deux fois (ex. `[Nom, Prenom]`).
+- **Blocs de texte libres** : insérer des paragraphes explicatifs entre les champs ou en tête/pied de formulaire.
 
-# Editing this README
+### Validation à la volée
+- Indicateurs **✓** (vert) / **✗** (rouge) à droite du label de chaque champ, qui apparaissent après le premier *focus-out* (état `touched`).
+- **Barre de progression** : « X / Y champs renseignés » + pourcentage, en haut du formulaire.
+- **Compteur de caractères** pour les inputs avec `maxLength`.
+- Les champs masqués par `showIf` sont **exclus du décompte**.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### UX d'entrée
+- **Apparences automatiques** : `Choice` avec ≤ 5 options → boutons radio ; `ChoiceList` → chips cliquables ; sinon menu déroulant ou auto-complétion sur demande.
+- **Placeholders intelligents** : `nom.prenom@exemple.fr` pour les emails, `06 12 34 56 78` pour les téléphones, `https://www.exemple.fr` pour les URLs.
+- **Auto-focus** du premier champ en mode standalone.
+- **Affichage des sections avancées** (validation / showIf) **masquable** depuis le bandeau en tête du panneau ⚙ — pratique pour un panneau épuré quand on n'utilise pas ces options.
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+1. **Hébergez le fichier** [`form-validator.html`](form-validator.html) sur n'importe quel hébergeur statique (GitLab Pages, GitHub Pages, serveur web, etc.).
+2. Dans Grist, sur la table cible :
+   - Ajoutez un **« Widget personnalisé »** (Custom widget).
+   - Collez l'URL de `form-validator.html`.
+   - Sélectionnez l'accès **« Full »** (le widget a besoin de lire les métadonnées des colonnes et d'insérer des lignes).
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## Access Rules pour le mode public
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Pré-requis pour que le **lien public** fonctionne avec un visiteur non connecté. Procédure officielle, inspirée de [`gristlabs/grist-form-submit`](https://github.com/gristlabs/grist-form-submit) :
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+1. **Ouvrir Access Rules** (icône bouclier dans le panneau latéral gauche du document).
+2. **Special Rules** : décochez **« Allow editors to edit structure »**.
+3. **Default Rules** : ajoutez une règle :
+   - Condition : `user.Access != OWNER`
+   - Permission : **Deny All** (les 4 cases R, U, C, D en rouge).
+4. **Add Table Rules** sur la table cible :
+   - Condition : *laissez vide* (= « Everyone »).
+   - Permission : cliquez deux fois sur **C (Create)** pour la passer en vert. Les autres restent à `—` (héritent du Deny par défaut).
+5. **Save** en haut à droite.
+6. Menu **Share** → **Manage Users** → activez **Public access** avec le rôle **Editor**.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Résultat : un visiteur anonyme ne peut **rien lire** dans le document, et peut **uniquement INSERT** dans la table du formulaire.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## Limitations connues
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+- Les colonnes de type `Attachments` ne sont pas supportées (pas d'upload de fichiers dans le widget).
+- Le mode public ne s'applique pas aux documents Grist auto-hébergés qui auraient un reverse-proxy retirant les en-têtes CORS — à tester sur votre instance avant déploiement.
+- Si JavaScript est désactivé chez le visiteur, la validation client est contournée. La **colonne formule Python** (mode 2) reste votre filet de sécurité côté serveur.
+- Les contraintes d'unicité sont vérifiées par fetch de la table avant chaque soumission : sur très grosses tables (> 50 000 lignes), cela peut être lent.
 
-## License
-For open source projects, say how it is licensed.
+## Crédits
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Développé pour la DRANE d'Orléans-Tours.
+S'appuie sur l'API plugin Grist ([docs.getgrist.com/grist-plugin-api.js](https://docs.getgrist.com/grist-plugin-api.js)) et sur les conventions de soumission de formulaires de [`gristlabs/grist-form-submit`](https://github.com/gristlabs/grist-form-submit).
