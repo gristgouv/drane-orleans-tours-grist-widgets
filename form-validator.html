@@ -695,6 +695,39 @@
       width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent);
     }
     .col-config.excluded { opacity: 0.55; background: #fafafa; }
+
+    /* ── Bandeau de préférences (haut du panneau ⚙) ── */
+    .feature-toggles {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 7px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+    .feature-toggles-title {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .feature-toggle {
+      display: flex; align-items: flex-start; gap: 8px;
+      margin: 4px 0;
+    }
+    .feature-toggle input[type="checkbox"] {
+      width: 14px; height: 14px; margin-top: 2px; cursor: pointer;
+      accent-color: var(--accent); flex-shrink: 0;
+    }
+    .feature-toggle label {
+      font-size: 0.8rem; cursor: pointer; user-select: none;
+      margin: 0; font-weight: 500; color: var(--text);
+      line-height: 1.4;
+    }
+    .feature-toggle label em {
+      color: var(--muted); font-style: normal; font-size: 0.72rem; display: block; margin-top: 1px;
+    }
   </style>
 </head>
 <body>
@@ -757,6 +790,9 @@ const state = {
   uniqueGroups: [],       // contraintes d'unicité composite : [["Nom","Prenom"], ["Email","Tel"]]
   textBlocks: [],         // blocs de texte libres dans le formulaire : [{ content, position }]
   fieldOrder: [],         // ordre d'affichage des champs (liste de colId) ; vide = ordre naturel
+  // Affichage des sections « avancées » dans le panneau ⚙
+  showValidationFields:  false,  // règles de validation (format / regex / min / max / longueur / message)
+  showConditionalFields: false,  // logique conditionnelle (showIf)
   validationColumnName: 'Validation',
   // Mode public / standalone (formulaire ouvert hors de Grist)
   server:    null,        // ex. "https://grist.exemple.fr"
@@ -1132,6 +1168,29 @@ function isEmptyValue(v) {
   if (v === false) return true;                                    // Bool décoché = non rempli
   if (typeof v === 'string' && v.trim() === '') return true;
   if (Array.isArray(v) && v.length === 0) return true;
+  return false;
+}
+
+// Détecte si au moins une colonne a une config de validation (format / regex / min / max / longueur / message)
+function hasAnyValidationConfig() {
+  for (const ovr of Object.values(state.validators || {})) {
+    if (!ovr) continue;
+    if (ovr.format && ovr.format !== 'none') return true;
+    if (ovr.regex && String(ovr.regex).trim()) return true;
+    if (ovr.errorMsg && String(ovr.errorMsg).trim()) return true;
+    if (ovr.min  !== undefined && ovr.min  !== '') return true;
+    if (ovr.max  !== undefined && ovr.max  !== '') return true;
+    if (ovr.minLength) return true;
+    if (ovr.maxLength) return true;
+  }
+  return false;
+}
+
+// Détecte si au moins une colonne a une logique conditionnelle (showIf)
+function hasAnyConditionalConfig() {
+  for (const ovr of Object.values(state.validators || {})) {
+    if (ovr && ovr.showIf && String(ovr.showIf).trim()) return true;
+  }
   return false;
 }
 
@@ -2145,9 +2204,49 @@ function showStandaloneSuccess() {
 //
 // ─── Panneau de configuration ──────────────────────────────────────────────
 //
+function renderFeatureToggles(body) {
+  const wrap = el('div', { class: 'feature-toggles' });
+  wrap.appendChild(el('div', { class: 'feature-toggles-title' },
+    'Options affichées par champ'));
+
+  // Toggle "règles de validation"
+  const valCb = el('input', { type: 'checkbox', id: 'tog-show-validation' });
+  valCb.checked = !!state.showValidationFields;
+  valCb.addEventListener('change', () => {
+    // Préserve les valeurs saisies dans le panneau avant de recharger
+    state.validators = readConfigPanel();
+    state.showValidationFields = valCb.checked;
+    renderConfigPanel();
+  });
+  const valLbl = el('label', { for: 'tog-show-validation' }, [
+    'Règles de validation',
+    el('em', {}, 'format, regex, valeurs min/max, longueurs, message d\'erreur'),
+  ]);
+  wrap.appendChild(el('div', { class: 'feature-toggle' }, [valCb, valLbl]));
+
+  // Toggle "logique conditionnelle"
+  const condCb = el('input', { type: 'checkbox', id: 'tog-show-conditional' });
+  condCb.checked = !!state.showConditionalFields;
+  condCb.addEventListener('change', () => {
+    state.validators = readConfigPanel();
+    state.showConditionalFields = condCb.checked;
+    renderConfigPanel();
+  });
+  const condLbl = el('label', { for: 'tog-show-conditional' }, [
+    'Logique conditionnelle',
+    el('em', {}, 'champ affiché uniquement si une condition est remplie (showIf)'),
+  ]);
+  wrap.appendChild(el('div', { class: 'feature-toggle' }, [condCb, condLbl]));
+
+  body.appendChild(wrap);
+}
+
 function renderConfigPanel() {
   const body = $('#config-body');
   body.innerHTML = '';
+
+  // Bandeau de préférences en tête (affichage des sections avancées)
+  renderFeatureToggles(body);
 
   if (state.columns.length === 0) {
     body.appendChild(el('p', { class: 'hint' }, "Aucune colonne à configurer."));
@@ -2201,22 +2300,24 @@ function renderConfigPanel() {
     ]));
 
     // Logique conditionnelle : afficher ce champ uniquement si …
-    const showIfTa = el('textarea', {
-      'data-k': 'showIf', rows: '3',
-      placeholder: "Vide = toujours afficher. Ex :\nform.Type == 'Particulier'\nlen(form.Mail) > 1",
-    });
-    showIfTa.value = ovr.showIf || '';
-    card.appendChild(el('div', { class: 'row' }, [
-      el('div', { class: 'full' }, [
-        el('label', {}, 'Afficher uniquement si (logique conditionnelle)'),
-        showIfTa,
-        el('div', { class: 'hint' },
-          "Syntaxe : form.<colonne> <op> <valeur> — ou fn(form.<colonne>) <op> <valeur>. " +
-          "Opérateurs : == != < <= > >=. Fonctions : len, lower, upper, trim. " +
-          "Valeurs : 'texte', \"texte\", nombre, true / false / null. " +
-          "Une condition par ligne (ET logique). Vide = toujours afficher."),
-      ]),
-    ]));
+    if (state.showConditionalFields) {
+      const showIfTa = el('textarea', {
+        'data-k': 'showIf', rows: '3',
+        placeholder: "Vide = toujours afficher. Ex :\nform.Type == 'Particulier'\nlen(form.Mail) > 1",
+      });
+      showIfTa.value = ovr.showIf || '';
+      card.appendChild(el('div', { class: 'row' }, [
+        el('div', { class: 'full' }, [
+          el('label', {}, 'Afficher uniquement si (logique conditionnelle)'),
+          showIfTa,
+          el('div', { class: 'hint' },
+            "Syntaxe : form.<colonne> <op> <valeur> — ou fn(form.<colonne>) <op> <valeur>. " +
+            "Opérateurs : == != < <= > >=. Fonctions : len, lower, upper, trim. " +
+            "Valeurs : 'texte', \"texte\", nombre, true / false / null. " +
+            "Une condition par ligne (ET logique). Vide = toujours afficher."),
+        ]),
+      ]));
+    }
 
     // Apparence : menu déroulant / radio / chips / cases à cocher / auto-complétion
     if (base === 'Choice' || base === 'Ref' || base === 'ChoiceList' || base === 'RefList') {
@@ -2266,67 +2367,69 @@ function renderConfigPanel() {
       ]));
     }
 
-    // Format prédéfini (pertinent surtout pour Text/Any)
-    if (base === 'Text' || base === 'Any') {
-      const row = el('div', { class: 'row' }, [
-        el('div', {}, [
-          el('label', {}, 'Format prédéfini'),
-          (() => {
-            const sel = el('select', { 'data-k': 'format' });
-            for (const f of ['none', 'email', 'phone', 'url']) {
-              const opt = el('option', { value: f }, f);
-              if ((ovr.format || 'none') === f) opt.selected = true;
-              sel.appendChild(opt);
-            }
-            return sel;
-          })(),
-        ]),
-        el('div', {}, [
-          el('label', {}, 'Message d\'erreur (optionnel)'),
-          el('input', { type: 'text', 'data-k': 'errorMsg', value: ovr.errorMsg || '' }),
-        ]),
-      ]);
-      card.appendChild(row);
+    // Règles de validation (format, regex, min, max, longueur, message)
+    if (state.showValidationFields) {
+      if (base === 'Text' || base === 'Any') {
+        const row = el('div', { class: 'row' }, [
+          el('div', {}, [
+            el('label', {}, 'Format prédéfini'),
+            (() => {
+              const sel = el('select', { 'data-k': 'format' });
+              for (const f of ['none', 'email', 'phone', 'url']) {
+                const opt = el('option', { value: f }, f);
+                if ((ovr.format || 'none') === f) opt.selected = true;
+                sel.appendChild(opt);
+              }
+              return sel;
+            })(),
+          ]),
+          el('div', {}, [
+            el('label', {}, 'Message d\'erreur (optionnel)'),
+            el('input', { type: 'text', 'data-k': 'errorMsg', value: ovr.errorMsg || '' }),
+          ]),
+        ]);
+        card.appendChild(row);
 
-      card.appendChild(el('div', { class: 'row' }, [
-        el('div', { class: 'full' }, [
-          el('label', {}, 'Regex personnalisée (priorité sur le format)'),
-          el('input', { type: 'text', 'data-k': 'regex', value: ovr.regex || '', placeholder: 'ex. ^[A-Z]{2}\\d{4}$' }),
-        ]),
-      ]));
+        card.appendChild(el('div', { class: 'row' }, [
+          el('div', { class: 'full' }, [
+            el('label', {}, 'Regex personnalisée (priorité sur le format)'),
+            el('input', { type: 'text', 'data-k': 'regex', value: ovr.regex || '', placeholder: 'ex. ^[A-Z]{2}\\d{4}$' }),
+          ]),
+        ]));
 
-      card.appendChild(el('div', { class: 'row' }, [
-        el('div', {}, [
-          el('label', {}, 'Longueur min'),
-          el('input', { type: 'number', 'data-k': 'minLength', value: ovr.minLength ?? '', min: '0' }),
-        ]),
-        el('div', {}, [
-          el('label', {}, 'Longueur max'),
-          el('input', { type: 'number', 'data-k': 'maxLength', value: ovr.maxLength ?? '', min: '0' }),
-        ]),
-      ]));
-    }
-    else if (base === 'Numeric' || base === 'Int') {
-      card.appendChild(el('div', { class: 'row' }, [
-        el('div', {}, [
-          el('label', {}, 'Valeur min'),
-          el('input', { type: 'number', 'data-k': 'min', value: ovr.min ?? '', step: 'any' }),
-        ]),
-        el('div', {}, [
-          el('label', {}, 'Valeur max'),
-          el('input', { type: 'number', 'data-k': 'max', value: ovr.max ?? '', step: 'any' }),
-        ]),
-      ]));
-      card.appendChild(el('div', { class: 'row' }, [
-        el('div', { class: 'full' }, [
-          el('label', {}, 'Message d\'erreur (optionnel)'),
-          el('input', { type: 'text', 'data-k': 'errorMsg', value: ovr.errorMsg || '' }),
-        ]),
-      ]));
-    }
-    else {
-      card.appendChild(el('div', { class: 'hint' },
-        "Validation automatique selon le type Grist. Pas de surcharge supplémentaire pour ce type."));
+        card.appendChild(el('div', { class: 'row' }, [
+          el('div', {}, [
+            el('label', {}, 'Longueur min'),
+            el('input', { type: 'number', 'data-k': 'minLength', value: ovr.minLength ?? '', min: '0' }),
+          ]),
+          el('div', {}, [
+            el('label', {}, 'Longueur max'),
+            el('input', { type: 'number', 'data-k': 'maxLength', value: ovr.maxLength ?? '', min: '0' }),
+          ]),
+        ]));
+      }
+      else if (base === 'Numeric' || base === 'Int') {
+        card.appendChild(el('div', { class: 'row' }, [
+          el('div', {}, [
+            el('label', {}, 'Valeur min'),
+            el('input', { type: 'number', 'data-k': 'min', value: ovr.min ?? '', step: 'any' }),
+          ]),
+          el('div', {}, [
+            el('label', {}, 'Valeur max'),
+            el('input', { type: 'number', 'data-k': 'max', value: ovr.max ?? '', step: 'any' }),
+          ]),
+        ]));
+        card.appendChild(el('div', { class: 'row' }, [
+          el('div', { class: 'full' }, [
+            el('label', {}, 'Message d\'erreur (optionnel)'),
+            el('input', { type: 'text', 'data-k': 'errorMsg', value: ovr.errorMsg || '' }),
+          ]),
+        ]));
+      }
+      else {
+        card.appendChild(el('div', { class: 'hint' },
+          "Validation automatique selon le type Grist. Pas de surcharge supplémentaire pour ce type."));
+      }
     }
 
     // Case "Inclure dans le formulaire" — décoché = la colonne n'apparaît pas pour le saisisseur
@@ -2779,25 +2882,40 @@ function renderValidationColumnSection(body) {
 }
 
 function readConfigPanel() {
-  const out = {};
+  // On part de l'état existant pour PRÉSERVER les clés des sections actuellement cachées
+  // (ex. regex configuré il y a longtemps mais case "Afficher la validation" décochée).
+  // Seuls les inputs réellement rendus dans le DOM mettent à jour leur clé.
+  const out = JSON.parse(JSON.stringify(state.validators || {}));
+
   document.querySelectorAll('#config-body .col-config').forEach(card => {
     const colId = card.dataset.col;
-    const cfg = {};
+    if (!out[colId]) out[colId] = {};
+    const cfg = out[colId];
+
     card.querySelectorAll('[data-k]').forEach(input => {
       const k = input.dataset.k;
       if (input.type === 'checkbox') {
-        if (input.checked) cfg[k] = true;
-        // 'included' a un défaut "true" : décoché doit explicitement stocker false
-        // pour distinguer "exclu" (false) de "non configuré" (undefined → true)
-        else if (k === 'included') cfg[k] = false;
+        if (input.checked) {
+          cfg[k] = true;
+        } else if (k === 'included') {
+          // 'included' a un défaut "true" : décoché stocke explicitement false
+          cfg[k] = false;
+        } else {
+          delete cfg[k];   // décocher = retour au défaut (clé absente)
+        }
         return;
       }
       const v = input.value;
-      if (v === '' || v === null || v === undefined) return;
-      cfg[k] = v;
+      if (v === '' || v === null || v === undefined) {
+        delete cfg[k];     // input vidé = retour au défaut
+      } else {
+        cfg[k] = v;
+      }
     });
-    if (Object.keys(cfg).length > 0) out[colId] = cfg;
+
+    if (Object.keys(out[colId]).length === 0) delete out[colId];
   });
+
   return out;
 }
 
@@ -2824,6 +2942,8 @@ async function saveConfig() {
     await grist.setOption('standaloneTitle',   state.standaloneTitle);
     await grist.setOption('standaloneSuccess', state.standaloneSuccess);
     await grist.setOption('docUrl',            state.docUrl);
+    await grist.setOption('showValidationFields',  !!state.showValidationFields);
+    await grist.setOption('showConditionalFields', !!state.showConditionalFields);
 
     // Recharge le schéma pour que les refOptions reflètent les nouveaux filtres.
     // Le fieldOrder est ré-appliqué automatiquement en fin de loadSchema.
@@ -3088,6 +3208,19 @@ async function bootGrist() {
     state.standaloneTitle      = (opts && opts.standaloneTitle)   || 'Formulaire';
     state.standaloneSuccess    = (opts && opts.standaloneSuccess) || 'Merci, votre réponse a été enregistrée.';
     state.docUrl               = (opts && opts.docUrl) || null;
+
+    // Affichage des sections avancées : préférence explicite > auto-détection sur la config existante
+    if (opts && 'showValidationFields' in opts) {
+      state.showValidationFields = !!opts.showValidationFields;
+    } else {
+      state.showValidationFields = hasAnyValidationConfig();
+    }
+    if (opts && 'showConditionalFields' in opts) {
+      state.showConditionalFields = !!opts.showConditionalFields;
+    } else {
+      state.showConditionalFields = hasAnyConditionalConfig();
+    }
+
     applyStandaloneTitleToTopbar();
     renderForm();
   });
