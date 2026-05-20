@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Carte – Départements & Régions</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --dept:    #2563eb;
+      --region:  #db2777;
+    }
+    html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; color: var(--text); background: var(--bg); font-size: 13px; }
+
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── Toolbar ── */
+    #toolbar {
+      flex-shrink: 0;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 8px 12px; background: var(--surface);
+      border-bottom: 1px solid var(--border); z-index: 100;
+    }
+    .tb-title { font-size: 13px; font-weight: 700; }
+    .tb-group { display: flex; align-items: center; gap: 4px; padding: 2px 6px 2px 8px; background: var(--bg); border-radius: 6px; border: 1px solid var(--border); }
+    .tb-label { font-size: 11px; color: var(--muted); margin-right: 2px; }
+
+    .toggle-btn {
+      padding: 4px 10px; border: 1.5px solid var(--border); border-radius: 5px;
+      background: var(--surface); font-size: 11px; font-weight: 500;
+      color: var(--muted); cursor: pointer; transition: all .15s;
+    }
+    .toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .toggle-btn.active { border-color: var(--accent); background: var(--aclt); color: var(--accent); }
+
+    .tb-slider { display: flex; align-items: center; gap: 6px; }
+    .tb-slider input[type=range] { width: 90px; accent-color: var(--accent); cursor: pointer; }
+    .tb-slider .size-val { font-family: 'Consolas', monospace; font-size: 11px; color: var(--text); min-width: 28px; text-align: right; }
+
+    #counter { font-size: 11px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+    #config-hint { font-size: 11px; color: var(--muted); font-style: italic; }
+
+    /* ── Map ── */
+    #map-wrap { flex: 1; position: relative; overflow: hidden; }
+    #map { width: 100%; height: 100%; background: #eaeef3; }
+
+    /* ── Markers ── */
+    .mk-dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,.35);
+      cursor: pointer; transition: transform .15s;
+    }
+    .mk-dot:hover, .mk-dot.selected { transform: scale(1.4); z-index: 999 !important; }
+
+    /* ── Labels permanents ── */
+    .place-label {
+      background: rgba(255,255,255,.85);
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      box-shadow: 0 1px 2px rgba(0,0,0,.08);
+      pointer-events: none;
+    }
+    .place-label::before { display: none !important; }
+
+    .leaflet-tooltip-pane .place-label { font-family: 'Segoe UI', system-ui, sans-serif; }
+
+    /* ── Popup ── */
+    .leaflet-popup-content-wrapper { border-radius: 8px; }
+    .leaflet-popup-content { margin: 10px 12px; font-size: 12px; max-height: 320px; overflow-y: auto; min-width: 200px; }
+    .popup-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .popup-row { display: flex; gap: 8px; padding: 3px 0; align-items: baseline; }
+    .popup-key { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; min-width: 80px; flex-shrink: 0; }
+    .popup-val { flex: 1; word-break: break-word; }
+    .popup-val a { color: var(--accent); }
+
+    /* ── Loader ── */
+    #loader {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(244,246,249,.85); z-index: 200; font-size: 12px; color: var(--muted);
+    }
+    #loader.hidden { display: none; }
+
+    /* ── Légende contours ── */
+    .legend-line { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); }
+    .legend-line .swatch { display: inline-block; width: 14px; height: 0; border-top-width: 2px; border-top-style: solid; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <span class="tb-title">🗺️ Carte</span>
+
+    <div class="tb-group">
+      <span class="tb-label">Limites :</span>
+      <button class="toggle-btn active" data-limit="dept" type="button">Départements</button>
+      <button class="toggle-btn"        data-limit="region" type="button">Régions</button>
+    </div>
+
+    <div class="tb-group">
+      <span class="tb-label">Noms :</span>
+      <button class="toggle-btn active" data-label="off" type="button">Masqués</button>
+      <button class="toggle-btn"        data-label="hover" type="button">Au survol</button>
+      <button class="toggle-btn"        data-label="always" type="button">Toujours</button>
+    </div>
+
+    <div class="tb-group tb-slider">
+      <span class="tb-label">Taille :</span>
+      <input type="range" id="fontSlider" min="8" max="24" step="1" value="12" />
+      <span class="size-val" id="fontVal">12px</span>
+    </div>
+
+    <span id="config-hint">Liez Latitude, Longitude et Nom du lieu dans les paramètres du widget.</span>
+    <span id="counter">—</span>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="loader">Chargement des contours…</div>
+  </div>
+</div>
+
+<script>
+  /* ════ ÉTAT ════ */
+  let allRecords = [];
+  let markers = [];
+  let limitsOn = { dept: true, region: false };
+  let labelMode = 'off';   // 'off' | 'hover' | 'always'
+  let labelFontSize = 12;
+
+  let deptLayer = null;
+  let regionLayer = null;
+  let labelLayer = L.layerGroup();   // tooltips permanents
+  let mapLabelsVisible = true;       // labels OSM (tile layer)
+
+  /* ════ SOURCES GEOJSON (CDN) ════ */
+  const URL_DEPT   = 'https://cdn.jsdelivr.net/gh/gregoiredavid/france-geojson@master/departements.geojson';
+  const URL_REGION = 'https://cdn.jsdelivr.net/gh/gregoiredavid/france-geojson@master/regions.geojson';
+
+  /* ════ HELPERS ════ */
+  const escHtml = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  const isUrl = v => /^https?:\/\/\S+$/i.test(String(v || '').trim());
+
+  function formatValue(v) {
+    if (v === null || v === undefined || v === '') return '<span style="color:var(--muted)">—</span>';
+    if (typeof v === 'boolean') return v ? '✓' : '✗';
+    if (Array.isArray(v)) {
+      if (v[0] === 'L') return formatValue(v[1]);          // [L, refId] Grist Reference → fallback
+      return v.map(x => escHtml(x)).join(', ');
+    }
+    if (typeof v === 'object') {
+      try { return escHtml(JSON.stringify(v)); } catch { return ''; }
+    }
+    if (typeof v === 'number') {
+      // Heuristique : date Grist (timestamp en secondes) → laisser brut (l'utilisateur verra)
+      return escHtml(String(v));
+    }
+    const s = String(v);
+    if (isUrl(s)) return `<a href="${escHtml(s)}" target="_blank" rel="noopener">${escHtml(s)}</a>`;
+    return escHtml(s).replace(/\n/g, '<br>');
+  }
+
+  const num = v => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  };
+
+  /* ════ LEAFLET ════ */
+  const map = L.map('map', { zoomControl: true, preferCanvas: false }).setView([46.6, 2.5], 6);
+
+  // Couches de tuiles : versions avec et sans labels (toponymes)
+  const tileLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO', maxZoom: 19,
+  });
+  const tileNoLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO', maxZoom: 19,
+  });
+  let currentTile = tileLabels.addTo(map);
+  labelLayer.addTo(map);
+
+  /* ════ CHARGEMENT GEOJSON ════ */
+  async function loadGeoJson(url) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} sur ${url}`);
+    return resp.json();
+  }
+
+  function styleDept() {
+    return { color: '#2563eb', weight: 1.2, fillOpacity: 0.04, fillColor: '#2563eb', opacity: 0.85 };
+  }
+  function styleRegion() {
+    return { color: '#db2777', weight: 2.2, fillOpacity: 0, opacity: 0.9 };
+  }
+
+  function attachDeptTooltip(feature, layer) {
+    const name = feature.properties?.nom || feature.properties?.NOM || '';
+    const code = feature.properties?.code || feature.properties?.CODE || '';
+    if (name) layer.bindTooltip(`${escHtml(name)} (${escHtml(code)})`, { sticky: true });
+  }
+  function attachRegionTooltip(feature, layer) {
+    const name = feature.properties?.nom || feature.properties?.NOM || '';
+    if (name) layer.bindTooltip(escHtml(name), { sticky: true, className: 'place-label', direction: 'center' });
+  }
+
+  async function initBoundaries() {
+    try {
+      const [deptGeo, regGeo] = await Promise.all([loadGeoJson(URL_DEPT), loadGeoJson(URL_REGION)]);
+      deptLayer = L.geoJSON(deptGeo, { style: styleDept, onEachFeature: attachDeptTooltip });
+      regionLayer = L.geoJSON(regGeo, { style: styleRegion, onEachFeature: attachRegionTooltip });
+      applyLimits();
+    } catch (e) {
+      console.error('Erreur GeoJSON :', e);
+      document.getElementById('loader').textContent = '⚠️ Impossible de charger les contours (connexion réseau ?).';
+      return;
+    }
+    document.getElementById('loader').classList.add('hidden');
+  }
+
+  function applyLimits() {
+    if (deptLayer)   { limitsOn.dept   ? deptLayer.addTo(map)   : map.removeLayer(deptLayer);   }
+    if (regionLayer) { limitsOn.region ? regionLayer.addTo(map) : map.removeLayer(regionLayer); }
+  }
+
+  /* ════ MARKERS ════ */
+  function clearMarkers() {
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+    labelLayer.clearLayers();
+  }
+
+  function makeMarkerIcon() {
+    return L.divIcon({
+      className: '',
+      html: `<div class="mk-dot"></div>`,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+  }
+
+  function buildPopupHtml(rec, labelKey) {
+    const title = labelKey && rec[labelKey] != null && String(rec[labelKey]).trim() !== ''
+      ? String(rec[labelKey])
+      : `Ligne #${rec.id ?? '?'}`;
+    const rows = Object.keys(rec)
+      .filter(k => k !== 'id' && !k.startsWith('manualSort'))
+      .map(k => `
+        <div class="popup-row">
+          <div class="popup-key">${escHtml(k)}</div>
+          <div class="popup-val">${formatValue(rec[k])}</div>
+        </div>`).join('');
+    return `<div class="popup-title">${escHtml(title)}</div>${rows}`;
+  }
+
+  function renderMarkers() {
+    clearMarkers();
+
+    const fontPx = labelFontSize;
+    const bounds = [];
+    let withCoords = 0;
+
+    allRecords.forEach(rec => {
+      const lat = num(rec.Latitude);
+      const lng = num(rec.Longitude);
+      if (lat === null || lng === null) return;
+      withCoords++;
+
+      const m = L.marker([lat, lng], { icon: makeMarkerIcon() }).addTo(map);
+      const labelText = rec.Label != null ? String(rec.Label).trim() : '';
+
+      // Popup au clic
+      m.bindPopup(() => buildPopupHtml(rec, 'Label'), { maxWidth: 360, autoPan: true });
+
+      // Tooltip selon mode
+      if (labelText) {
+        if (labelMode === 'hover') {
+          m.bindTooltip(escHtml(labelText), {
+            direction: 'top', offset: [0, -8],
+            className: 'place-label',
+          });
+          // Forcer la taille via setStyle au montage du tooltip
+          m.on('tooltipopen', e => {
+            const el = e.tooltip.getElement();
+            if (el) el.style.fontSize = fontPx + 'px';
+          });
+        } else if (labelMode === 'always') {
+          const tooltip = L.tooltip({
+            permanent: true,
+            direction: 'top',
+            offset: [0, -8],
+            className: 'place-label',
+            interactive: false,
+          })
+            .setLatLng([lat, lng])
+            .setContent(escHtml(labelText));
+          labelLayer.addLayer(tooltip);
+          // Appliquer la taille après ajout au DOM
+          requestAnimationFrame(() => {
+            const el = tooltip.getElement();
+            if (el) el.style.fontSize = fontPx + 'px';
+          });
+        }
+      }
+
+      markers.push(m);
+      bounds.push([lat, lng]);
+    });
+
+    // Compteur
+    const total = allRecords.length;
+    const missing = total - withCoords;
+    let txt = `${withCoords} point${withCoords !== 1 ? 's' : ''}`;
+    if (missing > 0) txt += ` · ${missing} sans coordonnées`;
+    document.getElementById('counter').textContent = txt;
+
+    // Ajuster la vue
+    if (bounds.length > 0) {
+      const group = L.featureGroup(markers);
+      try { map.fitBounds(group.getBounds().pad(0.15), { maxZoom: 13 }); } catch {}
+    }
+  }
+
+  /* ════ CONTRÔLES TOOLBAR ════ */
+  document.querySelectorAll('[data-limit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.limit;
+      limitsOn[key] = !limitsOn[key];
+      btn.classList.toggle('active', limitsOn[key]);
+      applyLimits();
+    });
+  });
+
+  document.querySelectorAll('[data-label]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.label;
+      if (mode === labelMode) return;
+      labelMode = mode;
+      document.querySelectorAll('[data-label]').forEach(b => b.classList.toggle('active', b.dataset.label === mode));
+      // Quand les labels sont permanents, cacher les toponymes de la tuile pour limiter la pollution visuelle
+      const wantTileLabels = mode !== 'always';
+      if (wantTileLabels !== mapLabelsVisible) {
+        map.removeLayer(currentTile);
+        currentTile = (wantTileLabels ? tileLabels : tileNoLabels).addTo(map);
+        mapLabelsVisible = wantTileLabels;
+      }
+      renderMarkers();
+    });
+  });
+
+  const slider = document.getElementById('fontSlider');
+  const sliderVal = document.getElementById('fontVal');
+  slider.addEventListener('input', e => {
+    labelFontSize = parseInt(e.target.value, 10);
+    sliderVal.textContent = labelFontSize + 'px';
+    // Appliquer immédiatement si labels permanents (sans re-render complet)
+    if (labelMode === 'always') {
+      labelLayer.eachLayer(l => {
+        const el = l.getElement && l.getElement();
+        if (el) el.style.fontSize = labelFontSize + 'px';
+      });
+    }
+  });
+
+  /* ════ GRIST ════ */
+  if (typeof grist !== 'undefined') {
+    grist.ready({
+      requiredAccess: 'read table',
+      columns: [
+        { name: 'Latitude',  type: 'Numeric',        title: 'Latitude',     description: 'Latitude du point (en degrés décimaux).' },
+        { name: 'Longitude', type: 'Numeric',        title: 'Longitude',    description: 'Longitude du point (en degrés décimaux).' },
+        { name: 'Label',     type: 'Text',           title: 'Nom du lieu',  description: 'Texte affiché en étiquette et titre du popup.', optional: true },
+      ],
+    });
+
+    grist.onRecords(async records => {
+      try {
+        allRecords = await grist.mapColumnNames(records) || records;
+      } catch (e) {
+        allRecords = records;
+      }
+      renderMarkers();
+    });
+  } else {
+    // Mode dev hors Grist : démo
+    allRecords = [
+      { id: 1, Latitude: 48.8566, Longitude: 2.3522,  Label: 'Paris' },
+      { id: 2, Latitude: 45.7640, Longitude: 4.8357,  Label: 'Lyon' },
+      { id: 3, Latitude: 43.2965, Longitude: 5.3698,  Label: 'Marseille' },
+      { id: 4, Latitude: 47.2184, Longitude: -1.5536, Label: 'Nantes' },
+      { id: 5, Latitude: 48.5734, Longitude: 7.7521,  Label: 'Strasbourg' },
+    ];
+    renderMarkers();
+  }
+
+  /* ════ INIT ════ */
+  initBoundaries();
+</script>
+</body>
+</html>
