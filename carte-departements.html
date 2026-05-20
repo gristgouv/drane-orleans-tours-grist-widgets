@@ -65,16 +65,18 @@
 
     /* ── Labels permanents ── */
     .place-label {
-      background: rgba(255,255,255,.85);
+      background: rgba(255,255,255,.92);
       border: 1px solid rgba(0,0,0,.08);
       border-radius: 4px;
       padding: 1px 5px;
       font-weight: 600;
       color: var(--text);
       white-space: nowrap;
-      box-shadow: 0 1px 2px rgba(0,0,0,.08);
+      box-shadow: 0 1px 2px rgba(0,0,0,.15);
       pointer-events: none;
+      transition: opacity .15s;
     }
+    .place-label.hidden-collision { opacity: 0; pointer-events: none; }
     .place-label::before { display: none !important; }
 
     .leaflet-tooltip-pane .place-label { font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -104,6 +106,14 @@
 <div id="app">
   <div id="toolbar">
     <span class="tb-title">🗺️ Carte</span>
+
+    <div class="tb-group">
+      <span class="tb-label">Fond :</span>
+      <button class="toggle-btn active" data-tile="light"  type="button">Clair</button>
+      <button class="toggle-btn"        data-tile="dark"   type="button">Sombre</button>
+      <button class="toggle-btn"        data-tile="osm"    type="button">OSM</button>
+      <button class="toggle-btn"        data-tile="sat"    type="button">Satellite</button>
+    </div>
 
     <div class="tb-group">
       <span class="tb-label">Limites :</span>
@@ -145,7 +155,7 @@
   let deptLayer = null;
   let regionLayer = null;
   let labelLayer = L.layerGroup();   // tooltips permanents
-  let mapLabelsVisible = true;       // labels OSM (tile layer)
+  let currentTileKey = 'light';
 
   /* ════ SOURCES GEOJSON (CDN) ════ */
   const URL_DEPT   = 'https://cdn.jsdelivr.net/gh/gregoiredavid/france-geojson@master/departements.geojson';
@@ -186,15 +196,54 @@
   /* ════ LEAFLET ════ */
   const map = L.map('map', { zoomControl: true, preferCanvas: false }).setView([46.6, 2.5], 6);
 
-  // Couches de tuiles : versions avec et sans labels (toponymes)
-  const tileLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CARTO', maxZoom: 19,
-  });
-  const tileNoLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CARTO', maxZoom: 19,
-  });
-  let currentTile = tileLabels.addTo(map);
+  // Fournisseurs de tuiles. Chacun expose éventuellement une variante sans toponymes,
+  // utilisée quand les étiquettes permanentes sont actives pour réduire la surcharge visuelle.
+  const TILE_PROVIDERS = {
+    light: {
+      withLabels: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        { attribution: '© OpenStreetMap © CARTO', maxZoom: 19 }),
+      noLabels:   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+        { attribution: '© OpenStreetMap © CARTO', maxZoom: 19 }),
+    },
+    dark: {
+      withLabels: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        { attribution: '© OpenStreetMap © CARTO', maxZoom: 19 }),
+      noLabels:   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+        { attribution: '© OpenStreetMap © CARTO', maxZoom: 19 }),
+    },
+    osm: {
+      withLabels: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        { attribution: '© OpenStreetMap contributors', maxZoom: 19, subdomains: 'abc' }),
+      noLabels: null,
+    },
+    sat: {
+      withLabels: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        { attribution: 'Tiles © Esri', maxZoom: 19 }),
+      noLabels: null,
+    },
+  };
+
+  let currentTile = TILE_PROVIDERS.light.withLabels.addTo(map);
   labelLayer.addTo(map);
+
+  function applyTile() {
+    const provider = TILE_PROVIDERS[currentTileKey];
+    const target = (labelMode === 'always' && provider.noLabels) ? provider.noLabels : provider.withLabels;
+    if (currentTile === target) return;
+    map.removeLayer(currentTile);
+    currentTile = target.addTo(map);
+    // Adapter la couleur des contours selon le fond (clair vs sombre/satellite)
+    updateBoundaryStyle();
+  }
+
+  function isDarkBackground() {
+    return currentTileKey === 'dark' || currentTileKey === 'sat';
+  }
+
+  function updateBoundaryStyle() {
+    if (deptLayer)   deptLayer.setStyle(styleDept());
+    if (regionLayer) regionLayer.setStyle(styleRegion());
+  }
 
   /* ════ CHARGEMENT GEOJSON ════ */
   async function loadGeoJson(url) {
@@ -204,10 +253,23 @@
   }
 
   function styleDept() {
-    return { color: '#2563eb', weight: 1.2, fillOpacity: 0.04, fillColor: '#2563eb', opacity: 0.85 };
+    const dark = isDarkBackground();
+    return {
+      color: dark ? '#93c5fd' : '#2563eb',
+      weight: 1.2,
+      fillOpacity: dark ? 0.0 : 0.04,
+      fillColor: '#2563eb',
+      opacity: dark ? 0.9 : 0.85,
+    };
   }
   function styleRegion() {
-    return { color: '#db2777', weight: 2.2, fillOpacity: 0, opacity: 0.9 };
+    const dark = isDarkBackground();
+    return {
+      color: dark ? '#f9a8d4' : '#db2777',
+      weight: 2.2,
+      fillOpacity: 0,
+      opacity: dark ? 0.95 : 0.9,
+    };
   }
 
   function attachDeptTooltip(feature, layer) {
@@ -335,7 +397,61 @@
       const group = L.featureGroup(markers);
       try { map.fitBounds(group.getBounds().pad(0.15), { maxZoom: 13 }); } catch {}
     }
+
+    // Première passe de déconfliction (après que les tooltips soient rendus)
+    requestAnimationFrame(() => requestAnimationFrame(deconflictLabels));
   }
+
+  /* ════ DÉCONFLICTION ÉTIQUETTES ════ */
+  // Masque les labels permanents dont la boîte englobante chevauche celle d'un label
+  // déjà placé. Priorité aux marqueurs les plus au sud (lat la plus basse) → les
+  // étiquettes "du haut" cèdent la place à celles "du bas" (plus proches de l'œil).
+  // Recalculé à chaque zoom / déplacement / changement de taille.
+  let deconflictPending = false;
+  function scheduleDeconflict() {
+    if (deconflictPending) return;
+    deconflictPending = true;
+    requestAnimationFrame(() => {
+      deconflictPending = false;
+      deconflictLabels();
+    });
+  }
+
+  function deconflictLabels() {
+    if (labelMode !== 'always') return;
+
+    const items = [];
+    labelLayer.eachLayer(l => {
+      const el = l.getElement && l.getElement();
+      if (!el) return;
+      el.classList.remove('hidden-collision');
+      const latlng = l.getLatLng();
+      items.push({ el, lat: latlng.lat });
+    });
+
+    // Mesurer les rectangles après reset (les éléments sont à nouveau visibles)
+    items.forEach(it => { it.rect = it.el.getBoundingClientRect(); });
+
+    // Trier par latitude croissante → les marqueurs au sud gardent leur étiquette
+    items.sort((a, b) => a.lat - b.lat);
+
+    const PAD = 2;
+    const placed = [];
+    for (const it of items) {
+      const r = it.rect;
+      if (!r || r.width === 0) continue;
+      const collides = placed.some(p =>
+        !(r.right + PAD < p.left || r.left - PAD > p.right ||
+          r.bottom + PAD < p.top || r.top - PAD > p.bottom));
+      if (collides) {
+        it.el.classList.add('hidden-collision');
+      } else {
+        placed.push(r);
+      }
+    }
+  }
+
+  map.on('zoomend moveend', scheduleDeconflict);
 
   /* ════ CONTRÔLES TOOLBAR ════ */
   document.querySelectorAll('[data-limit]').forEach(btn => {
@@ -353,14 +469,18 @@
       if (mode === labelMode) return;
       labelMode = mode;
       document.querySelectorAll('[data-label]').forEach(b => b.classList.toggle('active', b.dataset.label === mode));
-      // Quand les labels sont permanents, cacher les toponymes de la tuile pour limiter la pollution visuelle
-      const wantTileLabels = mode !== 'always';
-      if (wantTileLabels !== mapLabelsVisible) {
-        map.removeLayer(currentTile);
-        currentTile = (wantTileLabels ? tileLabels : tileNoLabels).addTo(map);
-        mapLabelsVisible = wantTileLabels;
-      }
+      applyTile();        // switch éventuel vers la variante sans toponymes
       renderMarkers();
+    });
+  });
+
+  document.querySelectorAll('[data-tile]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.tile;
+      if (key === currentTileKey) return;
+      currentTileKey = key;
+      document.querySelectorAll('[data-tile]').forEach(b => b.classList.toggle('active', b.dataset.tile === key));
+      applyTile();
     });
   });
 
@@ -369,12 +489,12 @@
   slider.addEventListener('input', e => {
     labelFontSize = parseInt(e.target.value, 10);
     sliderVal.textContent = labelFontSize + 'px';
-    // Appliquer immédiatement si labels permanents (sans re-render complet)
     if (labelMode === 'always') {
       labelLayer.eachLayer(l => {
         const el = l.getElement && l.getElement();
         if (el) el.style.fontSize = labelFontSize + 'px';
       });
+      scheduleDeconflict();   // les tailles ont changé → recalcul
     }
   });
 
