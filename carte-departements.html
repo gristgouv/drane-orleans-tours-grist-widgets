@@ -73,13 +73,33 @@
       color: var(--text);
       white-space: nowrap;
       box-shadow: 0 1px 2px rgba(0,0,0,.15);
-      pointer-events: none;
       transition: opacity .15s;
+      font-family: 'Segoe UI', system-ui, sans-serif;
     }
+    /* Tooltips au survol : non interactifs */
+    .leaflet-tooltip.place-label { pointer-events: none; }
     .place-label.hidden-collision { opacity: 0; pointer-events: none; }
     .place-label::before { display: none !important; }
 
-    .leaflet-tooltip-pane .place-label { font-family: 'Segoe UI', system-ui, sans-serif; }
+    /* Étiquettes draggables (mode "Toujours") */
+    .label-marker {
+      width: 0 !important;
+      height: 0 !important;
+      overflow: visible;
+    }
+    .label-marker .place-label {
+      position: absolute;
+      bottom: 8px;
+      left: 0;
+      transform: translateX(-50%);
+      cursor: grab;
+      user-select: none;
+    }
+    .label-marker.dragging .place-label { cursor: grabbing; }
+    .label-marker.moved .place-label {
+      border-color: rgba(37,99,235,.4);
+      box-shadow: 0 1px 3px rgba(37,99,235,.25);
+    }
 
     /* ── Popup ── */
     .leaflet-popup-content-wrapper { border-radius: 8px; }
@@ -154,7 +174,8 @@
 
   let deptLayer = null;
   let regionLayer = null;
-  let labelLayer = L.layerGroup();   // tooltips permanents
+  let labelMarkers = [];             // étiquettes draggables en mode "always"
+  const labelOffsets = new Map();    // recId → {lat, lng} position manuelle persistée pour la session
   let currentTileKey = 'light';
 
   /* ════ SOURCES GEOJSON (CDN) ════ */
@@ -224,7 +245,6 @@
   };
 
   let currentTile = TILE_PROVIDERS.light.withLabels.addTo(map);
-  labelLayer.addTo(map);
 
   function applyTile() {
     const provider = TILE_PROVIDERS[currentTileKey];
@@ -305,7 +325,11 @@
   function clearMarkers() {
     markers.forEach(m => map.removeLayer(m));
     markers = [];
-    labelLayer.clearLayers();
+    labelMarkers.forEach(lm => {
+      map.removeLayer(lm.marker);
+      if (lm.leader) map.removeLayer(lm.leader);
+    });
+    labelMarkers = [];
   }
 
   function makeMarkerIcon() {
@@ -363,21 +387,66 @@
             if (el) el.style.fontSize = fontPx + 'px';
           });
         } else if (labelMode === 'always') {
-          const tooltip = L.tooltip({
-            permanent: true,
-            direction: 'top',
-            offset: [0, -8],
-            className: 'place-label',
-            interactive: false,
-          })
-            .setLatLng([lat, lng])
-            .setContent(escHtml(labelText));
-          labelLayer.addLayer(tooltip);
-          // Appliquer la taille après ajout au DOM
-          requestAnimationFrame(() => {
-            const el = tooltip.getElement();
-            if (el) el.style.fontSize = fontPx + 'px';
+          const recId = rec.id;
+          const stored = labelOffsets.get(recId);
+          const startLatLng = stored ? [stored.lat, stored.lng] : [lat, lng];
+          const moved = !!stored;
+
+          const icon = L.divIcon({
+            className: 'label-marker' + (moved ? ' moved' : ''),
+            html: `<div class="place-label" style="font-size:${fontPx}px">${escHtml(labelText)}</div>`,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
           });
+          const labelMk = L.marker(startLatLng, {
+            icon,
+            draggable: true,
+            autoPan: false,
+            zIndexOffset: 1000,
+            keyboard: false,
+          }).addTo(map);
+
+          const entry = { marker: labelMk, lat, lng, moved, leader: null, recId };
+
+          const updateLeader = () => {
+            const tip = labelMk.getLatLng();
+            const a = map.latLngToContainerPoint([lat, lng]);
+            const b = map.latLngToContainerPoint(tip);
+            if (a.distanceTo(b) > 18) {
+              if (!entry.leader) {
+                entry.leader = L.polyline([[lat, lng], tip], {
+                  color: '#64748b', weight: 1, dashArray: '3,3', interactive: false,
+                }).addTo(map);
+              } else {
+                entry.leader.setLatLngs([[lat, lng], tip]);
+              }
+            } else if (entry.leader) {
+              map.removeLayer(entry.leader);
+              entry.leader = null;
+            }
+          };
+          entry.updateLeader = updateLeader;
+
+          labelMk.on('dragstart', () => {
+            const el = labelMk.getElement();
+            if (el) el.classList.add('dragging');
+          });
+          labelMk.on('drag', updateLeader);
+          labelMk.on('dragend', () => {
+            const el = labelMk.getElement();
+            if (el) {
+              el.classList.remove('dragging');
+              el.classList.add('moved');
+            }
+            const pos = labelMk.getLatLng();
+            labelOffsets.set(recId, { lat: pos.lat, lng: pos.lng });
+            entry.moved = true;
+            updateLeader();
+            scheduleDeconflict();
+          });
+
+          labelMarkers.push(entry);
+          if (moved) requestAnimationFrame(updateLeader);
         }
       }
 
@@ -420,24 +489,30 @@
   function deconflictLabels() {
     if (labelMode !== 'always') return;
 
-    const items = [];
-    labelLayer.eachLayer(l => {
-      const el = l.getElement && l.getElement();
+    // Les étiquettes manuellement déplacées sont toujours visibles
+    // et "réservent" leur emplacement contre lequel les autres se déconflictent.
+    const candidates = [];
+    const reserved = [];
+    labelMarkers.forEach(lm => {
+      const wrapper = lm.marker.getElement();
+      if (!wrapper) return;
+      const el = wrapper.querySelector('.place-label');
       if (!el) return;
       el.classList.remove('hidden-collision');
-      const latlng = l.getLatLng();
-      items.push({ el, lat: latlng.lat });
+      if (lm.moved) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0) reserved.push(r);
+      } else {
+        candidates.push({ el, lat: lm.lat });
+      }
     });
 
-    // Mesurer les rectangles après reset (les éléments sont à nouveau visibles)
-    items.forEach(it => { it.rect = it.el.getBoundingClientRect(); });
-
-    // Trier par latitude croissante → les marqueurs au sud gardent leur étiquette
-    items.sort((a, b) => a.lat - b.lat);
+    candidates.forEach(it => { it.rect = it.el.getBoundingClientRect(); });
+    candidates.sort((a, b) => a.lat - b.lat);
 
     const PAD = 2;
-    const placed = [];
-    for (const it of items) {
+    const placed = reserved.slice();
+    for (const it of candidates) {
       const r = it.rect;
       if (!r || r.width === 0) continue;
       const collides = placed.some(p =>
@@ -451,7 +526,10 @@
     }
   }
 
-  map.on('zoomend moveend', scheduleDeconflict);
+  map.on('zoomend moveend', () => {
+    scheduleDeconflict();
+    labelMarkers.forEach(lm => lm.updateLeader && lm.updateLeader());
+  });
 
   /* ════ CONTRÔLES TOOLBAR ════ */
   document.querySelectorAll('[data-limit]').forEach(btn => {
@@ -490,8 +568,10 @@
     labelFontSize = parseInt(e.target.value, 10);
     sliderVal.textContent = labelFontSize + 'px';
     if (labelMode === 'always') {
-      labelLayer.eachLayer(l => {
-        const el = l.getElement && l.getElement();
+      labelMarkers.forEach(lm => {
+        const wrapper = lm.marker.getElement();
+        if (!wrapper) return;
+        const el = wrapper.querySelector('.place-label');
         if (el) el.style.fontSize = labelFontSize + 'px';
       });
       scheduleDeconflict();   // les tailles ont changé → recalcul
