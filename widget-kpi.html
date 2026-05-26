@@ -385,6 +385,82 @@
       background: var(--aclt);
     }
 
+    /* ── Filtres ── */
+    .filter-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .filter-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
+      gap: 5px;
+      align-items: center;
+    }
+    .filter-row.unary {
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+    }
+    .filter-row select,
+    .filter-row input[type="text"] {
+      width: 100%;
+      padding: 5px 7px;
+      border: 1.5px solid var(--border);
+      border-radius: 5px;
+      font-size: 0.78rem;
+      color: var(--text);
+      background: var(--surface);
+      outline: none;
+      font-family: inherit;
+      min-width: 0;
+    }
+    .filter-row select:focus,
+    .filter-row input:focus { border-color: var(--accent); }
+    .filter-row .btn-del-filter {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 0.95rem;
+      padding: 3px 6px; border-radius: 4px; line-height: 1;
+    }
+    .filter-row .btn-del-filter:hover { background: #fee; color: var(--bad); }
+    .btn-add-filter {
+      align-self: flex-start;
+      background: none;
+      border: 1px dashed var(--border);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .btn-add-filter:hover { border-color: var(--accent); background: var(--aclt); }
+    .filter-empty {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    /* Indicateur de filtres actifs sur la carte */
+    .kpi-filters-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--muted);
+      background: var(--bg);
+      padding: 1px 6px;
+      border-radius: 8px;
+      text-transform: none;
+      letter-spacing: 0;
+      cursor: help;
+      border: 1px solid var(--border);
+    }
+    .kpi-filters-badge::before {
+      content: '⛃';
+      font-size: 0.75rem;
+    }
+
     #panel-footer {
       padding: 12px 16px;
       border-top: 1px solid var(--border);
@@ -621,9 +697,104 @@ function formatPct(p, decimals = 1) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// FILTRES / CONDITIONS
+// ═══════════════════════════════════════════════════════════════
+const OPERATORS = {
+  '=':           { label: '=',            unary: false, group: 'all' },
+  '!=':          { label: '≠',            unary: false, group: 'all' },
+  '>':           { label: '>',            unary: false, group: 'cmp' },
+  '>=':          { label: '≥',            unary: false, group: 'cmp' },
+  '<':           { label: '<',            unary: false, group: 'cmp' },
+  '<=':          { label: '≤',            unary: false, group: 'cmp' },
+  'contains':    { label: 'contient',     unary: false, group: 'text' },
+  'notcontains': { label: 'ne contient pas', unary: false, group: 'text' },
+  'in':          { label: 'dans la liste', unary: false, group: 'list', hint: 'séparées par ,' },
+  'notin':       { label: 'hors liste',   unary: false, group: 'list', hint: 'séparées par ,' },
+  'empty':       { label: 'est vide',     unary: true,  group: 'all' },
+  'notempty':    { label: 'non vide',     unary: true,  group: 'all' },
+};
+
+function compareValues(rowVal, op, userVal, colType) {
+  if (op === 'empty')    return rowVal === null || rowVal === undefined || rowVal === '';
+  if (op === 'notempty') return !(rowVal === null || rowVal === undefined || rowVal === '');
+
+  if (op === 'in' || op === 'notin') {
+    const list = String(userVal ?? '').split(',').map(s => s.trim()).filter(s => s !== '');
+    const rowStr = String(rowVal ?? '').trim();
+    const found = list.some(item => item === rowStr);
+    return op === 'in' ? found : !found;
+  }
+
+  if (op === 'contains' || op === 'notcontains') {
+    const rowStr = String(rowVal ?? '').toLowerCase();
+    const userStr = String(userVal ?? '').toLowerCase();
+    const found = userStr === '' ? true : rowStr.includes(userStr);
+    return op === 'contains' ? found : !found;
+  }
+
+  // = / != / cmp : tente d'abord une comparaison selon le type détecté
+  if (op === '=' || op === '!=') {
+    if (colType === 'number') {
+      const r = toNumber(rowVal), u = toNumber(userVal);
+      if (r !== null && u !== null) {
+        const eq = r === u;
+        return op === '=' ? eq : !eq;
+      }
+    }
+    if (colType === 'date') {
+      const r = toDate(rowVal), u = toDate(userVal);
+      if (r && u) {
+        const eq = r.getTime() === u.getTime();
+        return op === '=' ? eq : !eq;
+      }
+    }
+    const eq = String(rowVal ?? '') === String(userVal ?? '');
+    return op === '=' ? eq : !eq;
+  }
+
+  if (op === '>' || op === '>=' || op === '<' || op === '<=') {
+    let r, u;
+    if (colType === 'date') {
+      const rd = toDate(rowVal), ud = toDate(userVal);
+      if (!rd || !ud) return false;
+      r = rd.getTime(); u = ud.getTime();
+    } else {
+      r = toNumber(rowVal); u = toNumber(userVal);
+      if (r === null || u === null) return false;
+    }
+    if (op === '>')  return r >  u;
+    if (op === '>=') return r >= u;
+    if (op === '<')  return r <  u;
+    if (op === '<=') return r <= u;
+  }
+
+  return false;
+}
+
+function getActiveFilters(kpi) {
+  if (!kpi || !Array.isArray(kpi.filters)) return [];
+  return kpi.filters.filter(f => {
+    if (!f || !f.column || !f.op) return false;
+    const def = OPERATORS[f.op];
+    if (def && def.unary) return true;
+    return f.value !== undefined && f.value !== null && String(f.value).trim() !== '';
+  });
+}
+
+function applyFilters(records, filters) {
+  const valid = getActiveFilters({ filters });
+  if (valid.length === 0) return records;
+  return records.filter(r => valid.every(f => {
+    const col = allColumns.find(c => c.id === f.column);
+    const colType = col ? col.type : 'text';
+    return compareValues(r[f.column], f.op, f.value, colType);
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════
 // AGRÉGATIONS
 // ═══════════════════════════════════════════════════════════════
-function aggregate(records, kpi) {
+function aggregateRaw(records, kpi) {
   const agg = kpi.aggregation || 'count';
 
   if (agg === 'count') {
@@ -675,6 +846,14 @@ function aggregate(records, kpi) {
   return null;
 }
 
+function aggregate(records, kpi) {
+  return aggregateRaw(applyFilters(records, kpi.filters), kpi);
+}
+
+function getFilteredCount(kpi) {
+  return applyFilters(allRecords, kpi.filters).length;
+}
+
 // Filtrage par période
 function filterByPeriod(records, dateCol, refDate, daysFrom, daysTo) {
   // Garde les lignes dont la date est dans [refDate - daysFrom; refDate - daysTo]
@@ -695,21 +874,24 @@ function computeTrend(kpi) {
   const days = PERIOD_DAYS[kpi.period];
   if (!days) return null;
 
-  // Date de référence = max date dans les données
+  // Pré-filtrage par conditions KPI (une seule fois) — la date de référence
+  // doit refléter la dernière donnée disponible APRÈS application des filtres.
+  const filtered = applyFilters(allRecords, kpi.filters);
+
   let maxMs = -Infinity;
-  for (const r of allRecords) {
+  for (const r of filtered) {
     const d = toDate(r[config.dateColumn]);
     if (d && d.getTime() > maxMs) maxMs = d.getTime();
   }
   if (!isFinite(maxMs)) return null;
   const refDate = new Date(maxMs);
 
-  const cur  = filterByPeriod(allRecords, config.dateColumn, refDate, days, 0);
-  const prev = filterByPeriod(allRecords, config.dateColumn, refDate, 2 * days, days);
+  const cur  = filterByPeriod(filtered, config.dateColumn, refDate, days, 0);
+  const prev = filterByPeriod(filtered, config.dateColumn, refDate, 2 * days, days);
   if (cur.length === 0 && prev.length === 0) return null;
 
-  const vCur  = aggregate(cur,  kpi);
-  const vPrev = aggregate(prev, kpi);
+  const vCur  = aggregateRaw(cur,  kpi);
+  const vPrev = aggregateRaw(prev, kpi);
   if (vCur === null || vPrev === null) return null;
   if (vPrev === 0) {
     if (vCur === 0) return { variation: 0, vCur, vPrev };
@@ -776,6 +958,22 @@ function renderKpiCard(kpi) {
     aggLabel.textContent += ' · ' + kpi.column;
   }
   title.appendChild(aggLabel);
+
+  // Indicateur de filtres actifs
+  const activeFilters = getActiveFilters(kpi);
+  if (activeFilters.length > 0) {
+    const filteredCount = getFilteredCount(kpi);
+    const badge = document.createElement('span');
+    badge.className = 'kpi-filters-badge';
+    badge.textContent = filteredCount + '/' + allRecords.length;
+    badge.title = activeFilters.map(f => {
+      const opDef = OPERATORS[f.op];
+      const opLabel = opDef ? opDef.label : f.op;
+      if (opDef && opDef.unary) return `${f.column} ${opLabel}`;
+      return `${f.column} ${opLabel} ${f.value ?? ''}`;
+    }).join('\n');
+    title.appendChild(badge);
+  }
   card.appendChild(title);
 
   // Valeur principale
@@ -1108,6 +1306,9 @@ function renderKpiEditor(kpi, idx) {
     return wrap;
   }, true));
 
+  // Filtres / conditions
+  body.appendChild(buildFiltersField(kpi));
+
   // Couleur
   body.appendChild(buildField('Couleur d\'accent', () => {
     const inp = document.createElement('input');
@@ -1122,6 +1323,123 @@ function renderKpiEditor(kpi, idx) {
 
   ed.appendChild(body);
   return ed;
+}
+
+function buildFiltersField(kpi) {
+  const sec = document.createElement('div');
+  sec.className = 'config-section';
+  const lbl = document.createElement('label');
+  lbl.textContent = 'Filtres / Conditions (combinés en ET)';
+  sec.appendChild(lbl);
+
+  const list = document.createElement('div');
+  list.className = 'filter-list';
+  sec.appendChild(list);
+
+  if (!Array.isArray(kpi.filters)) kpi.filters = [];
+
+  const refresh = () => {
+    list.innerHTML = '';
+    if (kpi.filters.length === 0) {
+      const empty = document.createElement('span');
+      empty.className = 'filter-empty';
+      empty.textContent = 'Aucune condition — toutes les lignes sont agrégées.';
+      list.appendChild(empty);
+    } else {
+      kpi.filters.forEach((f, i) => {
+        list.appendChild(renderFilterRow(kpi, f, i, refresh));
+      });
+    }
+  };
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-add-filter';
+  btn.textContent = '+ Ajouter une condition';
+  btn.addEventListener('click', () => {
+    kpi.filters.push({ column: '', op: '=', value: '' });
+    refresh();
+  });
+  sec.appendChild(btn);
+
+  refresh();
+  return sec;
+}
+
+function renderFilterRow(kpi, filter, idx, onChange) {
+  const row = document.createElement('div');
+  row.className = 'filter-row';
+
+  // Colonne
+  const selCol = document.createElement('select');
+  selCol.innerHTML = '<option value="">— colonne —</option>';
+  allColumns.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.id + (c.type !== 'text' ? ' (' + c.type + ')' : '');
+    selCol.appendChild(opt);
+  });
+  selCol.value = filter.column || '';
+  selCol.addEventListener('change', () => {
+    filter.column = selCol.value;
+  });
+
+  // Opérateur
+  const selOp = document.createElement('select');
+  Object.entries(OPERATORS).forEach(([k, def]) => {
+    const opt = document.createElement('option');
+    opt.value = k; opt.textContent = def.label;
+    selOp.appendChild(opt);
+  });
+  selOp.value = filter.op || '=';
+  const updateRowUnary = () => {
+    const def = OPERATORS[filter.op || '='];
+    row.classList.toggle('unary', !!def && def.unary);
+  };
+  selOp.addEventListener('change', () => {
+    filter.op = selOp.value;
+    updateRowUnary();
+  });
+
+  // Valeur
+  const inpVal = document.createElement('input');
+  inpVal.type = 'text';
+  inpVal.value = filter.value !== undefined && filter.value !== null ? filter.value : '';
+  inpVal.placeholder = 'Valeur';
+  const refreshPlaceholder = () => {
+    const def = OPERATORS[filter.op || '='];
+    if (def && def.hint) inpVal.placeholder = def.hint;
+    else if (filter.column) {
+      const col = allColumns.find(c => c.id === filter.column);
+      if (col && col.type === 'date') inpVal.placeholder = 'AAAA-MM-JJ';
+      else if (col && col.type === 'number') inpVal.placeholder = 'Nombre';
+      else inpVal.placeholder = 'Valeur';
+    } else {
+      inpVal.placeholder = 'Valeur';
+    }
+  };
+  refreshPlaceholder();
+  inpVal.addEventListener('input', () => { filter.value = inpVal.value; });
+  selOp.addEventListener('change', refreshPlaceholder);
+  selCol.addEventListener('change', refreshPlaceholder);
+
+  // Bouton suppression
+  const btnDel = document.createElement('button');
+  btnDel.type = 'button';
+  btnDel.className = 'btn-del-filter';
+  btnDel.title = 'Supprimer cette condition';
+  btnDel.textContent = '×';
+  btnDel.addEventListener('click', () => {
+    kpi.filters.splice(idx, 1);
+    onChange();
+  });
+
+  row.appendChild(selCol);
+  row.appendChild(selOp);
+  row.appendChild(inpVal);
+  row.appendChild(btnDel);
+  updateRowUnary();
+  return row;
 }
 
 function buildField(label, makeInput, isHtml) {
@@ -1194,6 +1512,7 @@ function addKpi() {
     targetMode: 'higher',
     color: DEFAULT_COLORS[idx % DEFAULT_COLORS.length],
     period: '',
+    filters: [],
     _open: true,
   });
   refreshKpiList();
