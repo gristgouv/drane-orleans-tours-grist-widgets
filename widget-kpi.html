@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tableau de bord KPI</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #f4f6f9;
+      --surface: #ffffff;
+      --border:  #e2e6ed;
+      --accent:  #2563eb;
+      --aclt:    #dbeafe;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --good:    #16a34a;
+      --bad:     #dc2626;
+      --warn:    #d97706;
+      --r:       10px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Topbar ── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+    }
+    #topbar h2 { font-size: 0.95rem; color: var(--text); }
+    #topbar-sub { font-size: 0.75rem; color: var(--muted); }
+    .config-hint { font-size: 0.72rem; color: var(--muted); font-style: italic; margin-right: 6px; white-space: nowrap; }
+    @media (max-width: 600px) { .config-hint { display: none; } }
+
+    .btn-icon {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; padding: 6px 8px; border-radius: 6px;
+      color: #4a5568; transition: background 0.15s; line-height: 1;
+    }
+    .btn-icon:hover { background: #edf2f7; }
+
+    /* ── Main area ── */
+    #main {
+      flex: 1;
+      padding: 16px;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    #empty-msg {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+      padding: 60px 20px;
+      line-height: 1.6;
+    }
+    #empty-msg strong { color: var(--text); display: block; margin-bottom: 6px; font-size: 1rem; }
+
+    /* ── KPI Grid ── */
+    #kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(var(--cols, 3), 1fr);
+      gap: 14px;
+    }
+    @media (max-width: 900px) { #kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 540px) { #kpi-grid { grid-template-columns: 1fr; } }
+
+    /* ── KPI Card ── */
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 16px 18px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.15s, box-shadow 0.15s;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 130px;
+    }
+    .kpi-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--kpi-color, var(--accent));
+    }
+
+    .kpi-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .kpi-title .kpi-agg-label {
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--muted);
+      background: var(--bg);
+      padding: 1px 6px;
+      border-radius: 8px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .kpi-value {
+      font-size: 1.9rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+      letter-spacing: -0.5px;
+    }
+    .kpi-value .kpi-unit {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-left: 3px;
+    }
+
+    .kpi-target {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.75rem;
+    }
+    .kpi-target-bar {
+      height: 6px;
+      background: var(--bg);
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .kpi-target-fill {
+      height: 100%;
+      background: var(--kpi-color, var(--accent));
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+    .kpi-target-label {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+    }
+    .kpi-target-label strong { color: var(--text); }
+    .kpi-target-label.ok strong { color: var(--good); }
+    .kpi-target-label.warn strong { color: var(--warn); }
+    .kpi-target-label.bad strong { color: var(--bad); }
+
+    .kpi-trend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .kpi-trend-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+    .kpi-trend-badge.up   { background: #f0fdf4; color: var(--good); }
+    .kpi-trend-badge.down { background: #fef2f2; color: var(--bad); }
+    .kpi-trend-badge.flat { background: var(--bg); color: var(--muted); }
+
+    .kpi-error {
+      font-size: 0.78rem;
+      color: var(--bad);
+      font-style: italic;
+    }
+
+    /* ── Overlay / Config panel ── */
+    #overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: flex-end;
+    }
+    #overlay.open { display: flex; }
+    #panel {
+      width: 380px;
+      max-width: 100%;
+      height: 100%;
+      background: white;
+      overflow-y: auto;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+    }
+    #panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; top: 0; z-index: 5;
+    }
+    #panel-header h3 { font-size: 0.95rem; }
+    #btn-close {
+      background: none; border: none; cursor: pointer;
+      font-size: 1.1rem; color: #4a5568; padding: 4px 8px; border-radius: 4px;
+    }
+    #btn-close:hover { background: #edf2f7; }
+    #panel-body { padding: 16px; flex: 1; }
+
+    .config-section {
+      margin-bottom: 16px;
+    }
+    .config-section > label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 6px;
+    }
+    .config-section select,
+    .config-section input[type="text"],
+    .config-section input[type="number"] {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+      font-family: inherit;
+    }
+    .config-section input[type="color"] {
+      width: 100%;
+      height: 32px;
+      padding: 2px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      background: var(--surface);
+    }
+    .config-section select:focus,
+    .config-section input:focus { border-color: var(--accent); }
+
+    .config-row {
+      display: flex;
+      gap: 10px;
+    }
+    .config-row .config-section { flex: 1; }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+    }
+    .checkbox-row input { cursor: pointer; }
+    .checkbox-row label {
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--text);
+      font-weight: 500;
+      margin-bottom: 0;
+    }
+
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text);
+      margin: 18px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* ── KPI editor (accordion) ── */
+    #kpi-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .kpi-editor {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .kpi-editor-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      cursor: pointer;
+      user-select: none;
+      background: var(--surface);
+    }
+    .kpi-editor-head:hover { background: #f7fafc; }
+    .kpi-editor-color {
+      width: 14px; height: 14px;
+      border-radius: 4px;
+      border: 1px solid rgba(0,0,0,0.1);
+      flex-shrink: 0;
+    }
+    .kpi-editor-title {
+      flex: 1;
+      font-size: 0.85rem;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .kpi-editor-title.empty { color: var(--muted); font-weight: 500; font-style: italic; }
+    .kpi-editor-actions {
+      display: flex;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .kpi-editor-actions button {
+      background: none; border: none; cursor: pointer;
+      padding: 3px 6px; border-radius: 4px;
+      color: var(--muted); font-size: 0.85rem;
+      line-height: 1;
+    }
+    .kpi-editor-actions button:hover { background: var(--bg); color: var(--text); }
+    .kpi-editor-actions .btn-del:hover { background: #fee; color: var(--bad); }
+    .kpi-editor-body {
+      display: none;
+      padding: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .kpi-editor.open .kpi-editor-body { display: block; }
+    .kpi-editor-chevron {
+      color: var(--muted);
+      transition: transform 0.2s;
+      font-size: 0.7rem;
+    }
+    .kpi-editor.open .kpi-editor-chevron { transform: rotate(90deg); }
+
+    .btn-add-kpi {
+      width: 100%;
+      padding: 9px;
+      background: var(--surface);
+      border: 1.5px dashed var(--border);
+      border-radius: 7px;
+      color: var(--accent);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: all 0.15s;
+    }
+    .btn-add-kpi:hover {
+      border-color: var(--accent);
+      background: var(--aclt);
+    }
+
+    #panel-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: #f7fafc;
+      position: sticky; bottom: 0;
+    }
+    #btn-save {
+      width: 100%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 9px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #btn-save:hover { background: #1d4ed8; }
+    #save-msg {
+      font-size: 0.8rem;
+      color: #276749;
+      text-align: center;
+      min-height: 16px;
+      margin-top: 6px;
+      font-weight: 600;
+    }
+    #save-msg.error { color: var(--bad); }
+
+    .help {
+      font-size: 0.74rem;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <div>
+    <h2 id="titre">Tableau de bord KPI</h2>
+    <span id="topbar-sub"></span>
+  </div>
+  <span class="config-hint">Cliquez sur &#9881; pour configurer</span>
+  <button id="btn-config" class="btn-icon" title="Configurer le widget">&#9881;</button>
+</div>
+
+<div id="main">
+  <div id="empty-msg">
+    <strong>Aucun KPI configur&eacute;</strong>
+    Ouvrez le panneau &#9881; pour ajouter vos premiers indicateurs.
+  </div>
+  <div id="kpi-grid" hidden></div>
+</div>
+
+<!-- Config panel -->
+<div id="overlay">
+  <div id="panel">
+    <div id="panel-header">
+      <h3>Configuration</h3>
+      <button id="btn-close">&#10005;</button>
+    </div>
+    <div id="panel-body">
+
+      <div class="config-section">
+        <label for="inp-title">Titre du tableau de bord</label>
+        <input type="text" id="inp-title" placeholder="Tableau de bord KPI" />
+      </div>
+
+      <div class="config-row">
+        <div class="config-section">
+          <label for="inp-cols">Colonnes (grille)</label>
+          <input type="number" id="inp-cols" min="1" max="6" value="3" />
+        </div>
+        <div class="config-section">
+          <label for="sel-date">Colonne de date</label>
+          <select id="sel-date"><option value="">&mdash; aucune &mdash;</option></select>
+          <p class="help">Requise pour la comparaison vs p&eacute;riode pr&eacute;c&eacute;dente.</p>
+        </div>
+      </div>
+
+      <div class="section-title">
+        <span>Indicateurs (KPI)</span>
+        <span id="kpi-count" style="font-size:0.75rem;color:var(--muted);font-weight:500"></span>
+      </div>
+
+      <div id="kpi-list"></div>
+      <button type="button" class="btn-add-kpi" id="btn-add-kpi">+ Ajouter un KPI</button>
+
+    </div>
+    <div id="panel-footer">
+      <button id="btn-save">Enregistrer</button>
+      <p id="save-msg"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let allRecords = [];
+let allColumns = []; // [{ id, type }] détectés à partir des records
+let config = {
+  title: '',
+  cols: 3,
+  dateColumn: '',
+  kpis: [],
+};
+
+const DEFAULT_COLORS = [
+  '#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2',
+  '#db2777', '#65a30d', '#ea580c', '#0d9488',
+];
+
+const AGG_LABELS = {
+  sum:     'Somme',
+  avg:     'Moyenne',
+  count:   'Nombre',
+  countd:  'Distincts',
+  min:     'Min',
+  max:     'Max',
+  last:    'Dernière',
+};
+
+const PERIOD_DAYS = {
+  '7d':  7,
+  '30d': 30,
+  '90d': 90,
+  '180d': 180,
+  '365d': 365,
+};
+const PERIOD_LABELS = {
+  '7d':   '7 jours',
+  '30d':  '30 jours',
+  '90d':  '90 jours',
+  '180d': '6 mois',
+  '365d': '12 mois',
+};
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS — colonnes & types
+// ═══════════════════════════════════════════════════════════════
+function detectColumns(records) {
+  if (!records.length) return [];
+  const sample = records[0];
+  const keys = Object.keys(sample).filter(k => k !== 'id' && k !== 'manualSort');
+  return keys.map(k => {
+    let isNumeric = true, isDate = true, hasValue = false;
+    for (const r of records) {
+      const v = r[k];
+      if (v === null || v === undefined || v === '') continue;
+      hasValue = true;
+      if (typeof v !== 'number' || !isFinite(v)) isNumeric = false;
+      if (!looksLikeDateValue(v)) isDate = false;
+      if (!isNumeric && !isDate) break;
+    }
+    let type = 'text';
+    if (hasValue && isNumeric) type = isDate ? 'date' : 'number';
+    else if (hasValue && isDate) type = 'date';
+    return { id: k, type };
+  });
+}
+
+function looksLikeDateValue(v) {
+  if (v instanceof Date) return !isNaN(v.getTime());
+  if (typeof v === 'number') {
+    // Grist : timestamps Unix en secondes ; plage raisonnable [1990-01-01 ; 2100-01-01]
+    return v > 631152000 && v < 4102444800;
+  }
+  if (typeof v === 'string' && v.length >= 8) {
+    const d = new Date(v);
+    return !isNaN(d.getTime());
+  }
+  return false;
+}
+
+function toDate(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  if (typeof v === 'number') {
+    // Grist : timestamp Unix secondes
+    const ms = v < 1e12 ? v * 1000 : v;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function toNumber(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(String(v).replace(',', '.'));
+  return isFinite(n) ? n : null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS — formatage
+// ═══════════════════════════════════════════════════════════════
+function formatValue(n, kpi) {
+  if (n === null || !isFinite(n)) return '—';
+  const decimals = (kpi.decimals !== undefined && kpi.decimals !== '') ? +kpi.decimals : 0;
+  const fmt = kpi.format || 'number';
+  const opts = {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  };
+  if (fmt === 'percent') {
+    return new Intl.NumberFormat('fr-FR', opts).format(n);
+  }
+  if (fmt === 'compact') {
+    return new Intl.NumberFormat('fr-FR', {
+      notation: 'compact',
+      maximumFractionDigits: Math.max(1, decimals),
+    }).format(n);
+  }
+  return new Intl.NumberFormat('fr-FR', opts).format(n);
+}
+
+function formatUnit(kpi) {
+  const fmt = kpi.format || 'number';
+  if (fmt === 'percent') return '%';
+  if (fmt === 'currency') return kpi.unit || '€';
+  return kpi.unit || '';
+}
+
+function formatPct(p, decimals = 1) {
+  if (p === null || !isFinite(p)) return '—';
+  return new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(p) + ' %';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AGRÉGATIONS
+// ═══════════════════════════════════════════════════════════════
+function aggregate(records, kpi) {
+  const agg = kpi.aggregation || 'count';
+
+  if (agg === 'count') {
+    return records.length;
+  }
+
+  if (agg === 'countd') {
+    if (!kpi.column) return null;
+    const set = new Set();
+    for (const r of records) {
+      const v = r[kpi.column];
+      if (v === null || v === undefined || v === '') continue;
+      set.add(typeof v === 'object' ? JSON.stringify(v) : v);
+    }
+    return set.size;
+  }
+
+  if (!kpi.column) return null;
+
+  if (agg === 'last') {
+    // Sans colonne de date : dernière ligne (par ordre naturel) avec valeur non vide
+    const sortedRecords = config.dateColumn
+      ? [...records].sort((a, b) => {
+          const da = toDate(a[config.dateColumn]);
+          const db = toDate(b[config.dateColumn]);
+          return (db ? db.getTime() : 0) - (da ? da.getTime() : 0);
+        })
+      : [...records].reverse();
+    for (const r of sortedRecords) {
+      const n = toNumber(r[kpi.column]);
+      if (n !== null) return n;
+    }
+    return null;
+  }
+
+  let sum = 0, count = 0, min = Infinity, max = -Infinity;
+  for (const r of records) {
+    const n = toNumber(r[kpi.column]);
+    if (n === null) continue;
+    sum += n; count++;
+    if (n < min) min = n;
+    if (n > max) max = n;
+  }
+  if (count === 0) return null;
+  if (agg === 'sum') return sum;
+  if (agg === 'avg') return sum / count;
+  if (agg === 'min') return min;
+  if (agg === 'max') return max;
+  return null;
+}
+
+// Filtrage par période
+function filterByPeriod(records, dateCol, refDate, daysFrom, daysTo) {
+  // Garde les lignes dont la date est dans [refDate - daysFrom; refDate - daysTo]
+  if (!dateCol) return [];
+  const msDay = 86400000;
+  const fromMs = refDate.getTime() - daysFrom * msDay;
+  const toMs   = refDate.getTime() - daysTo   * msDay;
+  return records.filter(r => {
+    const d = toDate(r[dateCol]);
+    if (!d) return false;
+    const t = d.getTime();
+    return t > fromMs && t <= toMs;
+  });
+}
+
+function computeTrend(kpi) {
+  if (!config.dateColumn || !kpi.column || !kpi.period) return null;
+  const days = PERIOD_DAYS[kpi.period];
+  if (!days) return null;
+
+  // Date de référence = max date dans les données
+  let maxMs = -Infinity;
+  for (const r of allRecords) {
+    const d = toDate(r[config.dateColumn]);
+    if (d && d.getTime() > maxMs) maxMs = d.getTime();
+  }
+  if (!isFinite(maxMs)) return null;
+  const refDate = new Date(maxMs);
+
+  const cur  = filterByPeriod(allRecords, config.dateColumn, refDate, days, 0);
+  const prev = filterByPeriod(allRecords, config.dateColumn, refDate, 2 * days, days);
+  if (cur.length === 0 && prev.length === 0) return null;
+
+  const vCur  = aggregate(cur,  kpi);
+  const vPrev = aggregate(prev, kpi);
+  if (vCur === null || vPrev === null) return null;
+  if (vPrev === 0) {
+    if (vCur === 0) return { variation: 0, vCur, vPrev };
+    return { variation: null, vCur, vPrev }; // variation infinie
+  }
+  const variation = ((vCur - vPrev) / Math.abs(vPrev)) * 100;
+  return { variation, vCur, vPrev };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDU
+// ═══════════════════════════════════════════════════════════════
+function render() {
+  const main = document.getElementById('main');
+  const grid = document.getElementById('kpi-grid');
+  const empty = document.getElementById('empty-msg');
+
+  document.getElementById('titre').textContent = config.title || 'Tableau de bord KPI';
+
+  if (!config.kpis || config.kpis.length === 0) {
+    grid.hidden = true;
+    empty.style.display = '';
+    empty.innerHTML = '<strong>Aucun KPI configuré</strong>Ouvrez le panneau ⚙ pour ajouter vos premiers indicateurs.';
+    document.getElementById('topbar-sub').textContent = '';
+    return;
+  }
+
+  if (allRecords.length === 0) {
+    grid.hidden = true;
+    empty.style.display = '';
+    empty.innerHTML = '<strong>Aucune donnée</strong>La table sélectionnée semble vide.';
+    return;
+  }
+
+  empty.style.display = 'none';
+  grid.hidden = false;
+  grid.style.setProperty('--cols', config.cols || 3);
+  grid.innerHTML = '';
+
+  config.kpis.forEach(kpi => {
+    grid.appendChild(renderKpiCard(kpi));
+  });
+
+  // Sous-titre
+  document.getElementById('topbar-sub').textContent =
+    `${config.kpis.length} KPI — ${allRecords.length} ligne${allRecords.length > 1 ? 's' : ''}`;
+}
+
+function renderKpiCard(kpi) {
+  const card = document.createElement('div');
+  card.className = 'kpi-card';
+  card.style.setProperty('--kpi-color', kpi.color || DEFAULT_COLORS[0]);
+
+  // Titre
+  const title = document.createElement('div');
+  title.className = 'kpi-title';
+  const titleText = document.createElement('span');
+  titleText.textContent = kpi.title || '(sans titre)';
+  title.appendChild(titleText);
+  const aggLabel = document.createElement('span');
+  aggLabel.className = 'kpi-agg-label';
+  aggLabel.textContent = AGG_LABELS[kpi.aggregation] || kpi.aggregation;
+  if (kpi.column && kpi.aggregation !== 'count') {
+    aggLabel.textContent += ' · ' + kpi.column;
+  }
+  title.appendChild(aggLabel);
+  card.appendChild(title);
+
+  // Valeur principale
+  const value = aggregate(allRecords, kpi);
+  const valueEl = document.createElement('div');
+  valueEl.className = 'kpi-value';
+  if (value === null) {
+    valueEl.innerHTML = '<span style="color:var(--muted)">—</span>';
+    const err = document.createElement('div');
+    err.className = 'kpi-error';
+    err.textContent = kpi.column
+      ? 'Aucune valeur numérique pour cette colonne.'
+      : 'Configurez la colonne source.';
+    card.appendChild(valueEl);
+    card.appendChild(err);
+    return card;
+  }
+  valueEl.innerHTML = formatValue(value, kpi);
+  const unit = formatUnit(kpi);
+  if (unit) {
+    const u = document.createElement('span');
+    u.className = 'kpi-unit';
+    u.textContent = unit;
+    valueEl.appendChild(u);
+  }
+  card.appendChild(valueEl);
+
+  // Comparaison vs objectif
+  if (kpi.target !== '' && kpi.target !== null && kpi.target !== undefined && isFinite(+kpi.target)) {
+    const target = +kpi.target;
+    const targetMode = kpi.targetMode || 'higher';
+    const ratio = target === 0 ? null : value / target;
+    const tBox = document.createElement('div');
+    tBox.className = 'kpi-target';
+
+    const pct = ratio !== null ? ratio * 100 : null;
+    let status = 'warn';
+    if (pct !== null) {
+      if (targetMode === 'higher') {
+        // higher is better : 100%+ ok, 80-100% warn, <80% bad
+        if (pct >= 100) status = 'ok';
+        else if (pct >= 80) status = 'warn';
+        else status = 'bad';
+      } else {
+        // lower is better : <=100% ok, 100-120% warn, >120% bad
+        if (pct <= 100) status = 'ok';
+        else if (pct <= 120) status = 'warn';
+        else status = 'bad';
+      }
+    }
+
+    const label = document.createElement('div');
+    label.className = 'kpi-target-label ' + status;
+    label.innerHTML = `
+      <span>Objectif : ${formatValue(target, kpi)}${unit ? ' ' + unit : ''}</span>
+      <strong>${pct === null ? '—' : formatPct(pct, pct >= 100 ? 0 : 1)}</strong>
+    `;
+    tBox.appendChild(label);
+
+    const bar = document.createElement('div');
+    bar.className = 'kpi-target-bar';
+    const fill = document.createElement('div');
+    fill.className = 'kpi-target-fill';
+    const fillPct = pct === null ? 0 : Math.max(0, Math.min(100, pct));
+    fill.style.width = fillPct + '%';
+    if (status === 'bad')  fill.style.background = 'var(--bad)';
+    if (status === 'warn') fill.style.background = 'var(--warn)';
+    if (status === 'ok')   fill.style.background = 'var(--good)';
+    bar.appendChild(fill);
+    tBox.appendChild(bar);
+
+    card.appendChild(tBox);
+  }
+
+  // Tendance vs période précédente
+  if (kpi.period && config.dateColumn) {
+    const trend = computeTrend(kpi);
+    if (trend) {
+      const tEl = document.createElement('div');
+      tEl.className = 'kpi-trend';
+      const badge = document.createElement('span');
+      badge.className = 'kpi-trend-badge';
+      let cls = 'flat', arrow = '→', text = '0 %';
+      if (trend.variation === null) {
+        arrow = '↑'; text = '∞'; cls = 'up';
+      } else if (trend.variation > 0.5) {
+        arrow = '↑'; cls = 'up'; text = '+' + formatPct(trend.variation, 1);
+      } else if (trend.variation < -0.5) {
+        arrow = '↓'; cls = 'down'; text = formatPct(trend.variation, 1);
+      } else {
+        arrow = '→'; cls = 'flat'; text = formatPct(trend.variation, 1);
+      }
+      // Inverse si "lower is better"
+      if ((kpi.targetMode || 'higher') === 'lower' && cls !== 'flat') {
+        cls = cls === 'up' ? 'down' : 'up';
+      }
+      badge.classList.add(cls);
+      badge.textContent = arrow + ' ' + text;
+      tEl.appendChild(badge);
+      const lbl = document.createElement('span');
+      lbl.textContent = 'vs ' + (PERIOD_LABELS[kpi.period] || kpi.period) + ' précédents';
+      tEl.appendChild(lbl);
+      card.appendChild(tEl);
+    } else {
+      const tEl = document.createElement('div');
+      tEl.className = 'kpi-trend';
+      tEl.innerHTML = `<span style="font-style:italic">Pas assez de données pour la tendance</span>`;
+      card.appendChild(tEl);
+    }
+  }
+
+  return card;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PANNEAU DE CONFIG — populate
+// ═══════════════════════════════════════════════════════════════
+function populatePanel() {
+  document.getElementById('inp-title').value = config.title || '';
+  document.getElementById('inp-cols').value = config.cols || 3;
+
+  // Sélecteur de colonne date
+  const selDate = document.getElementById('sel-date');
+  const dateOptions = allColumns.filter(c => c.type === 'date');
+  selDate.innerHTML = '<option value="">— aucune —</option>';
+  dateOptions.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.id;
+    selDate.appendChild(opt);
+  });
+  if (config.dateColumn) selDate.value = config.dateColumn;
+
+  refreshKpiList();
+}
+
+function refreshKpiList() {
+  const list = document.getElementById('kpi-list');
+  list.innerHTML = '';
+  document.getElementById('kpi-count').textContent =
+    config.kpis.length === 0 ? '' :
+    config.kpis.length + ' KPI';
+
+  config.kpis.forEach((kpi, idx) => {
+    list.appendChild(renderKpiEditor(kpi, idx));
+  });
+}
+
+function renderKpiEditor(kpi, idx) {
+  const ed = document.createElement('div');
+  ed.className = 'kpi-editor' + (kpi._open ? ' open' : '');
+
+  // Head
+  const head = document.createElement('div');
+  head.className = 'kpi-editor-head';
+  head.innerHTML = `
+    <span class="kpi-editor-chevron">▶</span>
+    <span class="kpi-editor-color" style="background:${kpi.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length]}"></span>
+    <span class="kpi-editor-title ${kpi.title ? '' : 'empty'}">${escapeHtml(kpi.title || 'Nouveau KPI')}</span>
+    <span class="kpi-editor-actions">
+      <button type="button" class="btn-up" title="Monter">▲</button>
+      <button type="button" class="btn-down" title="Descendre">▼</button>
+      <button type="button" class="btn-del" title="Supprimer">×</button>
+    </span>
+  `;
+  head.addEventListener('click', e => {
+    if (e.target.closest('button')) return;
+    kpi._open = !kpi._open;
+    ed.classList.toggle('open', !!kpi._open);
+  });
+  head.querySelector('.btn-up').addEventListener('click', e => {
+    e.stopPropagation();
+    if (idx === 0) return;
+    [config.kpis[idx - 1], config.kpis[idx]] = [config.kpis[idx], config.kpis[idx - 1]];
+    refreshKpiList();
+  });
+  head.querySelector('.btn-down').addEventListener('click', e => {
+    e.stopPropagation();
+    if (idx === config.kpis.length - 1) return;
+    [config.kpis[idx + 1], config.kpis[idx]] = [config.kpis[idx], config.kpis[idx + 1]];
+    refreshKpiList();
+  });
+  head.querySelector('.btn-del').addEventListener('click', e => {
+    e.stopPropagation();
+    if (!confirm('Supprimer ce KPI ?')) return;
+    config.kpis.splice(idx, 1);
+    refreshKpiList();
+  });
+  ed.appendChild(head);
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'kpi-editor-body';
+
+  // Titre
+  body.appendChild(buildField('Titre', () => {
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = kpi.title || '';
+    inp.placeholder = 'Ex. Chiffre d\'affaires';
+    inp.addEventListener('input', () => {
+      kpi.title = inp.value;
+      const titleEl = head.querySelector('.kpi-editor-title');
+      titleEl.textContent = kpi.title || 'Nouveau KPI';
+      titleEl.classList.toggle('empty', !kpi.title);
+    });
+    return inp;
+  }));
+
+  // Agrégation + colonne (sur une rangée)
+  const aggRow = document.createElement('div');
+  aggRow.className = 'config-row';
+  aggRow.appendChild(buildField('Agrégation', () => {
+    const sel = document.createElement('select');
+    Object.entries(AGG_LABELS).forEach(([v, label]) => {
+      const opt = document.createElement('option');
+      opt.value = v; opt.textContent = label;
+      sel.appendChild(opt);
+    });
+    sel.value = kpi.aggregation || 'count';
+    sel.addEventListener('change', () => {
+      kpi.aggregation = sel.value;
+      // Si count, la colonne devient optionnelle
+    });
+    return sel;
+  }));
+  aggRow.appendChild(buildField('Colonne source', () => {
+    const sel = document.createElement('select');
+    sel.innerHTML = '<option value="">— compter les lignes —</option>';
+    allColumns.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.id + (c.type !== 'text' ? ' (' + c.type + ')' : '');
+      sel.appendChild(opt);
+    });
+    if (kpi.column) sel.value = kpi.column;
+    sel.addEventListener('change', () => { kpi.column = sel.value; });
+    return sel;
+  }));
+  body.appendChild(aggRow);
+
+  // Format + unité + décimales
+  const fmtRow = document.createElement('div');
+  fmtRow.className = 'config-row';
+  fmtRow.appendChild(buildField('Format', () => {
+    const sel = document.createElement('select');
+    [
+      ['number',   'Nombre'],
+      ['currency', 'Monétaire'],
+      ['percent',  'Pourcentage'],
+      ['compact',  'Compact (1,2k / 3,4M)'],
+    ].forEach(([v, label]) => {
+      const opt = document.createElement('option');
+      opt.value = v; opt.textContent = label;
+      sel.appendChild(opt);
+    });
+    sel.value = kpi.format || 'number';
+    sel.addEventListener('change', () => { kpi.format = sel.value; });
+    return sel;
+  }));
+  fmtRow.appendChild(buildField('Unité / symbole', () => {
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = kpi.unit || '';
+    inp.placeholder = '€, $, kg, ...';
+    inp.addEventListener('input', () => { kpi.unit = inp.value; });
+    return inp;
+  }));
+  fmtRow.appendChild(buildField('Décimales', () => {
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.min = '0'; inp.max = '6';
+    inp.value = kpi.decimals !== undefined ? kpi.decimals : 0;
+    inp.addEventListener('input', () => { kpi.decimals = inp.value === '' ? 0 : +inp.value; });
+    return inp;
+  }));
+  body.appendChild(fmtRow);
+
+  // Objectif + sens
+  const targetRow = document.createElement('div');
+  targetRow.className = 'config-row';
+  targetRow.appendChild(buildField('Objectif (optionnel)', () => {
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.step = 'any';
+    inp.value = kpi.target !== undefined && kpi.target !== null ? kpi.target : '';
+    inp.placeholder = 'Aucun';
+    inp.addEventListener('input', () => {
+      kpi.target = inp.value === '' ? '' : +inp.value;
+    });
+    return inp;
+  }));
+  targetRow.appendChild(buildField('Sens', () => {
+    const sel = document.createElement('select');
+    [
+      ['higher', 'Plus c\'est haut, mieux c\'est'],
+      ['lower',  'Plus c\'est bas, mieux c\'est'],
+    ].forEach(([v, label]) => {
+      const opt = document.createElement('option');
+      opt.value = v; opt.textContent = label;
+      sel.appendChild(opt);
+    });
+    sel.value = kpi.targetMode || 'higher';
+    sel.addEventListener('change', () => { kpi.targetMode = sel.value; });
+    return sel;
+  }));
+  body.appendChild(targetRow);
+
+  // Période de comparaison
+  body.appendChild(buildField('Comparaison vs période précédente', () => {
+    const sel = document.createElement('select');
+    sel.innerHTML = `
+      <option value="">— désactivée —</option>
+      <option value="7d">7 derniers jours</option>
+      <option value="30d">30 derniers jours</option>
+      <option value="90d">90 derniers jours</option>
+      <option value="180d">6 derniers mois</option>
+      <option value="365d">12 derniers mois</option>
+    `;
+    sel.value = kpi.period || '';
+    sel.addEventListener('change', () => { kpi.period = sel.value; });
+    const wrap = document.createElement('div');
+    wrap.appendChild(sel);
+    if (!config.dateColumn) {
+      const help = document.createElement('p');
+      help.className = 'help';
+      help.textContent = 'Définissez la « Colonne de date » globale pour activer la tendance.';
+      wrap.appendChild(help);
+    }
+    return wrap;
+  }, true));
+
+  // Couleur
+  body.appendChild(buildField('Couleur d\'accent', () => {
+    const inp = document.createElement('input');
+    inp.type = 'color';
+    inp.value = kpi.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length];
+    inp.addEventListener('input', () => {
+      kpi.color = inp.value;
+      head.querySelector('.kpi-editor-color').style.background = inp.value;
+    });
+    return inp;
+  }));
+
+  ed.appendChild(body);
+  return ed;
+}
+
+function buildField(label, makeInput, isHtml) {
+  const sec = document.createElement('div');
+  sec.className = 'config-section';
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  sec.appendChild(lbl);
+  sec.appendChild(makeInput());
+  return sec;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[c]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PANNEAU — open/close/save
+// ═══════════════════════════════════════════════════════════════
+function openPanel() {
+  populatePanel();
+  document.getElementById('overlay').classList.add('open');
+}
+function closePanel() {
+  document.getElementById('overlay').classList.remove('open');
+}
+
+async function saveConfig() {
+  config.title = document.getElementById('inp-title').value.trim();
+  config.cols = Math.max(1, Math.min(6, parseInt(document.getElementById('inp-cols').value, 10) || 3));
+  config.dateColumn = document.getElementById('sel-date').value;
+
+  // Nettoyage : retire les flags internes _open avant sauvegarde
+  const cleanKpis = config.kpis.map(k => {
+    const { _open, ...rest } = k;
+    return rest;
+  });
+
+  const msgEl = document.getElementById('save-msg');
+  try {
+    await grist.setOption('kpiConfig', JSON.stringify({
+      title: config.title,
+      cols: config.cols,
+      dateColumn: config.dateColumn,
+      kpis: cleanKpis,
+    }));
+    msgEl.className = '';
+    msgEl.textContent = 'Sauvegardé !';
+    render();
+    setTimeout(() => { msgEl.textContent = ''; closePanel(); }, 800);
+  } catch (e) {
+    msgEl.className = 'error';
+    msgEl.textContent = 'Erreur : ' + e.message;
+  }
+}
+
+function addKpi() {
+  const idx = config.kpis.length;
+  config.kpis.push({
+    id: 'k_' + Math.random().toString(36).slice(2, 9),
+    title: '',
+    column: '',
+    aggregation: 'count',
+    format: 'number',
+    unit: '',
+    decimals: 0,
+    target: '',
+    targetMode: 'higher',
+    color: DEFAULT_COLORS[idx % DEFAULT_COLORS.length],
+    period: '',
+    _open: true,
+  });
+  refreshKpiList();
+  // Scroll vers le nouveau KPI
+  const list = document.getElementById('kpi-list');
+  list.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('btn-config').addEventListener('click', openPanel);
+document.getElementById('btn-close').addEventListener('click', closePanel);
+document.getElementById('btn-save').addEventListener('click', saveConfig);
+document.getElementById('btn-add-kpi').addEventListener('click', addKpi);
+document.getElementById('sel-date').addEventListener('change', e => {
+  config.dateColumn = e.target.value;
+  refreshKpiList();
+});
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closePanel();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('overlay').classList.contains('open')) {
+    closePanel();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GRIST API
+// ═══════════════════════════════════════════════════════════════
+grist.ready({ requiredAccess: 'read table' });
+
+grist.onOptions(options => {
+  if (options && options.kpiConfig) {
+    try {
+      const saved = JSON.parse(options.kpiConfig);
+      Object.assign(config, saved);
+      if (!Array.isArray(config.kpis)) config.kpis = [];
+    } catch (e) {}
+  }
+  render();
+});
+
+grist.onRecords(records => {
+  allRecords = records || [];
+  allColumns = detectColumns(allRecords);
+  render();
+});
+</script>
+</body>
+</html>

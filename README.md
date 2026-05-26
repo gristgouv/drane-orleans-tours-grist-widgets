@@ -15,6 +15,7 @@ Catalogue complet : ouvrez [`index.html`](index.html) en local ou via votre dép
 | Bar Chart D3.js | [`d3js-bar-chart.html`](d3js-bar-chart.html) | Diagramme en barres configurable. |
 | Radar D3.js | [`d3js-radar.html`](d3js-radar.html) | Radar / toile d'araignée configurable. |
 | Catalogue / Galerie de fiches | [`widget-cards.html`](widget-cards.html) | Affichage des lignes Grist en cartes (recherche, filtres, vue détail). |
+| Tableau de bord KPI | [`widget-kpi.html`](widget-kpi.html) | Grille de cartes KPI configurables (agrégations, objectif, tendance vs période). |
 
 ---
 
