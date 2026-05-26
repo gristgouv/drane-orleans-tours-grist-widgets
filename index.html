@@ -217,6 +217,11 @@ const WIDGETS = [
     desc: 'Affichage ergonomique des lignes Grist sous forme de cartes : titre, description (avec URLs auto-cliquables), image (URL ou pièce jointe), tags. Recherche plein-texte, filtres par tags, vue détail au clic, 4 tailles de cartes (compacte, moyenne, grande, liste).',
   },
   {
+    name: 'Tableau de bord KPI',
+    file: 'widget-kpi.html',
+    desc: 'Tableau de bord d\'indicateurs clés de performance : grille responsive de cartes KPI configurables manuellement. Pour chaque carte : titre, colonne source, agrégation (somme, moyenne, comptage, distincts, min, max, dernière valeur), format (nombre, monétaire, pourcentage, compact), unité, décimales, objectif avec sens (haut/bas = mieux) et barre de progression colorée, comparaison de tendance vs période précédente (7j / 30j / 90j / 6 mois / 12 mois) avec flèche et variation en %, couleur d\'accent. Sélection d\'une colonne de date globale pour activer les tendances. Réorganisation des cartes par boutons ▲/▼.',
+  },
+  {
     name: 'Formulaire validé',
     file: 'form-validator.html',
     desc: 'Formulaire de saisie qui valide les données avant insertion dans la table : détection automatique des types Grist (Text, Numeric, Int, Date, DateTime, Bool, Choice, ChoiceList) et surcharges par colonne configurables (regex personnalisée, formats prédéfinis email / téléphone / URL, valeurs min/max, longueurs min/max, message d\'erreur). Trois usages possibles : (1) saisie validée par un éditeur Grist connecté ; (2) génération d\'une colonne formule Python qui rejoue les mêmes règles côté Grist (utile en complément d\'un formulaire Grist natif) ; (3) génération d\'un « lien public » autonome — le widget s\'ouvre hors de Grist et soumet directement via l\'API REST, sans login (nécessite des Access Rules permettant l\'INSERT anonyme sur la table). Nécessite un accès « complet » au document.',
