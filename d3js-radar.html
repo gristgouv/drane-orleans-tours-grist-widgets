@@ -370,6 +370,16 @@
         <label for="sel-label">Colonne pour le nom des séries (optionnel)</label>
         <select id="sel-label"><option value="">— numéroter les séries —</option></select>
       </div>
+      <div class="config-section">
+        <label for="sel-sort">Tri</label>
+        <select id="sel-sort">
+          <option value="none">Aucun</option>
+          <option value="value-desc">Valeur décroissante</option>
+          <option value="value-asc">Valeur croissante</option>
+          <option value="name-asc">Nom A → Z</option>
+          <option value="name-desc">Nom Z → A</option>
+        </select>
+      </div>
 
       <div class="config-row">
         <div class="config-section">
@@ -445,6 +455,7 @@ let config = {
   subtitle: '',
   axisCols: [],
   labelCol: '',
+  sort: 'none',
   scaleMode: 'shared',
   maxValue: '',         // chaîne vide = auto
   gridLevels: 5,
@@ -516,6 +527,21 @@ function seriesLabelFor(record, index) {
   return `Série ${index + 1}`;
 }
 
+function sortSeries(series) {
+  switch (config.sort) {
+    case 'value-asc':
+      return series.sort((a, b) => a.values.reduce((s, v) => s + v, 0) - b.values.reduce((s, v) => s + v, 0));
+    case 'value-desc':
+      return series.sort((a, b) => b.values.reduce((s, v) => s + v, 0) - a.values.reduce((s, v) => s + v, 0));
+    case 'name-asc':
+      return series.sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+    case 'name-desc':
+      return series.sort((a, b) => b.label.localeCompare(a.label, 'fr'));
+    default:
+      return series;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // CONFIG PANEL
 // ═══════════════════════════════════════════════════════════════
@@ -546,6 +572,7 @@ function populateSelects() {
     selLabel.appendChild(opt);
   });
   selLabel.value = config.labelCol || '';
+  document.getElementById('sel-sort').value = config.sort || 'none';
 
   // Palette
   const selPal = document.getElementById('sel-palette');
@@ -582,7 +609,11 @@ function populateSelects() {
 
 function getSeriesLabels() {
   // Liste des labels de séries pour la prévisualisation des couleurs
-  return allRecords.map((r, i) => seriesLabelFor(r, i));
+  const series = allRecords.map((r, i) => ({ label: seriesLabelFor(r, i), values: config.axisCols.map(col => {
+    const v = parseFloat(r[col]);
+    return isFinite(v) ? v : 0;
+  }) }));
+  return sortSeries(series.slice()).map(s => s.label);
 }
 
 function refreshColorsList() {
@@ -653,7 +684,7 @@ function render() {
   }
 
   // Construire les séries (1 par ligne)
-  const series = allRecords.map((r, i) => ({
+  const series = sortSeries(allRecords.map((r, i) => ({
     label: seriesLabelFor(r, i),
     values: config.axisCols.map(col => {
       const v = parseFloat(r[col]);
@@ -661,7 +692,7 @@ function render() {
     }),
     record: r,
     index: i,
-  }));
+  })));
 
   if (series.length === 0) {
     emptyMsg.textContent = 'Aucune donnée à afficher.';
@@ -890,6 +921,7 @@ async function saveConfig() {
     document.querySelectorAll('#axis-grid input[type="checkbox"]:checked')
   ).map(cb => cb.value);
   config.labelCol = document.getElementById('sel-label').value;
+  config.sort = document.getElementById('sel-sort').value || 'none';
   config.scaleMode = document.getElementById('sel-scale').value;
   config.maxValue = document.getElementById('inp-max').value.trim();
   config.gridLevels = parseInt(document.getElementById('inp-levels').value) || 5;
@@ -929,6 +961,7 @@ document.getElementById('overlay').addEventListener('keydown', e => {
   if (e.key === 'Escape') closePanel();
 });
 
+document.getElementById('sel-sort').addEventListener('change', refreshColorsList);
 document.getElementById('sel-palette').addEventListener('change', e => {
   config.palette = e.target.value;
   refreshColorsList();
