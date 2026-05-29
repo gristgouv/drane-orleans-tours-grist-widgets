@@ -421,6 +421,15 @@
           <label for="sel-value">Colonne valeur (numérique, optionnel)</label>
           <select id="sel-value"><option value="">— compter les lignes —</option></select>
         </div>
+        <div class="config-section">
+          <label for="sel-sort">Tri</label>
+          <select id="sel-sort">
+            <option value="value-desc">Valeur décroissante</option>
+            <option value="value-asc">Valeur croissante</option>
+            <option value="name-asc">Nom A → Z</option>
+            <option value="name-desc">Nom Z → A</option>
+          </select>
+        </div>
       </div>
 
       <div id="mode-cols" class="mode-section">
@@ -448,7 +457,11 @@
 
       <div class="config-section checkbox-row">
         <input type="checkbox" id="inp-showlabels" checked />
-        <label for="inp-showlabels">Afficher les valeurs sur les arcs</label>
+        <label for="inp-showlabels">Afficher les effectifs sur les arcs</label>
+      </div>
+      <div class="config-section checkbox-row">
+        <input type="checkbox" id="inp-showpct-label" />
+        <label for="inp-showpct-label">Afficher les pourcentages sur les arcs</label>
       </div>
       <div class="config-section checkbox-row">
         <input type="checkbox" id="inp-showpct" checked />
@@ -484,7 +497,9 @@ let config = {
   colCategory: '',
   colValue: '',
   pivotCols: [],        // colonnes numériques utilisées en mode pivot
+  sort: 'value-desc',
   showLabels: true,
+  showPctLabels: false,
   showPct: true,
   innerPct: 55,
   padAngle: 1,
@@ -563,6 +578,9 @@ function populateSelects() {
   });
   if (prevVal && numCols.includes(prevVal)) selVal.value = prevVal;
 
+  const selSort = document.getElementById('sel-sort');
+  if (selSort) selSort.value = config.sort || 'value-desc';
+
   // Populate pivot columns grid
   const grid = document.getElementById('cols-grid');
   if (numCols.length === 0) {
@@ -602,6 +620,7 @@ function populateSelects() {
   if (config.colCategory) selCat.value = config.colCategory;
   if (config.colValue) selVal.value = config.colValue;
   document.getElementById('inp-showlabels').checked = config.showLabels;
+  document.getElementById('inp-showpct-label').checked = config.showPctLabels;
   document.getElementById('inp-showpct').checked = config.showPct;
   document.getElementById('inp-inner').value = config.innerPct;
   document.getElementById('inp-pad').value = config.padAngle;
@@ -611,31 +630,19 @@ function populateSelects() {
   refreshColorsList();
 }
 
+function sortData(data) {
+  switch (config.sort) {
+    case 'value-asc': return data.sort((a, b) => a.value - b.value);
+    case 'value-desc': return data.sort((a, b) => b.value - a.value);
+    case 'name-asc': return data.sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+    case 'name-desc': return data.sort((a, b) => b.label.localeCompare(a.label, 'fr'));
+    default: return data;
+  }
+}
+
 function getPreviewCategories() {
-  // Reconstruit les catégories à partir de l'état courant du formulaire
-  const activeTab = document.querySelector('.mode-tab.active');
-  const mode = activeTab ? activeTab.dataset.mode : config.mode;
-
-  if (mode === 'cols') {
-    return Array.from(
-      document.querySelectorAll('#cols-grid input[type="checkbox"]:checked')
-    ).map(cb => cb.value);
-  }
-
-  const catCol = document.getElementById('sel-category').value;
-  if (!catCol || !allRecords.length) return [];
-  const valCol = document.getElementById('sel-value').value;
-  const set = new Set();
-  for (const r of allRecords) {
-    const key = String(r[catCol] ?? '');
-    if (!key) continue;
-    if (valCol) {
-      const n = parseFloat(r[valCol]);
-      if (!isFinite(n)) continue;
-    }
-    set.add(key);
-  }
-  return [...set].sort();
+  const data = sortData(aggregate());
+  return data.map(d => d.label);
 }
 
 function refreshColorsList() {
@@ -700,8 +707,7 @@ function aggregate() {
         }
         return { label: col, value: total };
       })
-      .filter(d => d.value > 0)
-      .sort((a, b) => b.value - a.value);
+      .filter(d => d.value > 0);
   }
 
   // Mode 'rows' : agrégation classique par catégorie
@@ -718,11 +724,10 @@ function aggregate() {
     map.set(key, (map.get(key) || 0) + v);
   }
   return Array.from(map.entries())
-    .map(([label, value]) => ({ label, value }))
-    .sort((a, b) => b.value - a.value);
+    .map(([label, value]) => ({ label, value }));
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 // CHART RENDERING
 // ═══════════════════════════════════════════════════════════════
 function render() {
@@ -748,7 +753,7 @@ function render() {
     return;
   }
 
-  const data = aggregate();
+  const data = sortData(aggregate());
 
   if (data.length === 0) {
     emptyMsg.textContent = 'Aucune donnée valide pour la configuration choisie.';
@@ -897,7 +902,7 @@ function render() {
     });
 
   // Arc labels (only if slice is big enough)
-  if (config.showLabels) {
+  if (config.showLabels || config.showPctLabels) {
     g.selectAll('.arc-label')
       .data(arcs)
       .join('text')
@@ -907,7 +912,10 @@ function render() {
       .text(d => {
         const pct = d.data.value / total;
         if (pct < 0.04) return '';
-        return d.data.value.toLocaleString('fr-FR');
+        const parts = [];
+        if (config.showLabels) parts.push(d.data.value.toLocaleString('fr-FR'));
+        if (config.showPctLabels) parts.push(`${(pct * 100).toFixed(1)} %`);
+        return parts.join(' — ');
       });
   }
 
@@ -956,10 +964,12 @@ async function saveConfig() {
   config.mode = activeTab ? activeTab.dataset.mode : 'rows';
   config.colCategory = document.getElementById('sel-category').value;
   config.colValue = document.getElementById('sel-value').value;
+  config.sort = document.getElementById('sel-sort').value || 'value-desc';
   config.pivotCols = Array.from(
     document.querySelectorAll('#cols-grid input[type="checkbox"]:checked')
   ).map(cb => cb.value);
   config.showLabels = document.getElementById('inp-showlabels').checked;
+  config.showPctLabels = document.getElementById('inp-showpct-label').checked;
   config.showPct = document.getElementById('inp-showpct').checked;
   config.innerPct = parseFloat(document.getElementById('inp-inner').value) || 55;
   config.padAngle = parseFloat(document.getElementById('inp-pad').value) || 0;
@@ -994,6 +1004,7 @@ document.querySelectorAll('.mode-tab').forEach(tab => {
 });
 document.getElementById('sel-category').addEventListener('change', refreshColorsList);
 document.getElementById('sel-value').addEventListener('change', refreshColorsList);
+document.getElementById('sel-sort').addEventListener('change', refreshColorsList);
 document.getElementById('cols-grid').addEventListener('change', refreshColorsList);
 document.getElementById('sel-palette').addEventListener('change', e => {
   config.palette = e.target.value;
