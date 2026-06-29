@@ -678,11 +678,17 @@ function aggregate() {
   }
 
   // Tri
+  // Si toutes les étiquettes sont numériques, on compare numériquement
+  // (sinon "10" passerait avant "7" en tri alphabétique).
+  const allNumeric = data.length > 0 && data.every(d => d.label !== '' && isFinite(Number(d.label)));
+  const cmpName = allNumeric
+    ? (a, b) => Number(a.label) - Number(b.label)
+    : (a, b) => a.label.localeCompare(b.label, 'fr', { numeric: true });
   switch (config.sort) {
     case 'value-desc': data.sort((a,b) => b.value - a.value); break;
     case 'value-asc':  data.sort((a,b) => a.value - b.value); break;
-    case 'name-asc':   data.sort((a,b) => a.label.localeCompare(b.label, 'fr')); break;
-    case 'name-desc':  data.sort((a,b) => b.label.localeCompare(a.label, 'fr')); break;
+    case 'name-asc':   data.sort(cmpName); break;
+    case 'name-desc':  data.sort((a,b) => cmpName(b,a)); break;
   }
   return data;
 }
