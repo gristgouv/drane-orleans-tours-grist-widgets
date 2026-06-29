@@ -537,6 +537,19 @@ function getPaletteColors() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// SÉCURITÉ — validation du contenu utilisateur
+// ═══════════════════════════════════════════════════════════════
+// Valide une couleur avant interpolation dans du markup / des attributs.
+// Toute valeur non reconnue est remplacée par une couleur neutre.
+function sanitizeColor(value) {
+  const s = String(value == null ? '' : value).trim();
+  if (/^#[0-9a-fA-F]{3,8}$/.test(s)) return s;
+  if (/^(rgb|rgba|hsl|hsla)\([0-9.,\s%]+\)$/i.test(s)) return s;
+  if (/^[a-zA-Z]+$/.test(s)) return s; // noms de couleur CSS (red, blue…)
+  return '#888888';
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════
 function allColumnNames(records) {
@@ -583,15 +596,24 @@ function populateSelects() {
 
   // Populate pivot columns grid
   const grid = document.getElementById('cols-grid');
+  grid.innerHTML = '';
   if (numCols.length === 0) {
-    grid.innerHTML = '<span class="cols-empty">Aucune colonne numérique disponible</span>';
+    const span = document.createElement('span');
+    span.className = 'cols-empty';
+    span.textContent = 'Aucune colonne numérique disponible';
+    grid.appendChild(span);
   } else {
-    grid.innerHTML = numCols.map(col => `
-      <label class="col-check">
-        <input type="checkbox" value="${col}" ${config.pivotCols.includes(col) ? 'checked' : ''}>
-        ${col}
-      </label>
-    `).join('');
+    numCols.forEach(col => {
+      const label = document.createElement('label');
+      label.className = 'col-check';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = col;
+      cb.checked = config.pivotCols.includes(col);
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(' ' + col));
+      grid.appendChild(label);
+    });
   }
 
   // Palette (groupées standards / daltoniens)
@@ -658,14 +680,26 @@ function refreshColorsList() {
   }
 
   categories.forEach((cat, i) => {
-    const cur = config.colorOverrides[cat] || colors[i % colors.length];
+    const cur = sanitizeColor(config.colorOverrides[cat] || colors[i % colors.length]);
     const row = document.createElement('div');
     row.className = 'color-row';
-    row.innerHTML = `
-      <input type="color" data-cat="${encodeURIComponent(cat)}" value="${cur}">
-      <span class="color-label" title="${cat}">${cat || '(vide)'}</span>
-      <button type="button" data-reset="${encodeURIComponent(cat)}">Défaut</button>
-    `;
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.dataset.cat = encodeURIComponent(cat);
+    colorInput.value = cur;
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'color-label';
+    labelSpan.title = cat;
+    labelSpan.textContent = cat || '(vide)';
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.dataset.reset = encodeURIComponent(cat);
+    resetBtn.textContent = 'Défaut';
+
+    row.append(colorInput, labelSpan, resetBtn);
     list.appendChild(row);
   });
 
@@ -885,11 +919,20 @@ function render() {
     .on('mouseover', function (event, d) {
       d3.select(this).transition().duration(120).attr('d', arcHover);
       const pct = (d.data.value / total * 100).toFixed(1);
-      let html = `<strong>${d.data.label}</strong><br>`;
       const valueLabel = isPivot ? 'Valeur' : (config.colValue || 'Nombre');
-      html += `${valueLabel} : <strong>${d.data.value.toLocaleString('fr-FR')}</strong>`;
-      if (config.showPct) html += `<br>Part : <strong>${pct} %</strong>`;
-      tooltip.innerHTML = html;
+      const nodes = [];
+      const strong = document.createElement('strong');
+      strong.textContent = d.data.label;
+      nodes.push(strong, document.createElement('br'));
+      const valueStrong = document.createElement('strong');
+      valueStrong.textContent = d.data.value.toLocaleString('fr-FR');
+      nodes.push(document.createTextNode(valueLabel + ' : '), valueStrong);
+      if (config.showPct) {
+        const pctStrong = document.createElement('strong');
+        pctStrong.textContent = pct + ' %';
+        nodes.push(document.createElement('br'), document.createTextNode('Part : '), pctStrong);
+      }
+      tooltip.replaceChildren(...nodes);
       tooltip.classList.add('visible');
     })
     .on('mousemove', function (event) {
@@ -935,12 +978,17 @@ function render() {
     const item = document.createElement('span');
     item.className = 'legend-item';
     const pct = (d.value / total * 100).toFixed(1);
+    const stroke = sanitizeColor(colorFor(d.label));
     if (config.usePatterns) {
-      const fill = fillFor(d.label);
-      item.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:middle"><rect x="1" y="1" width="12" height="12" rx="2" fill="${fill}" stroke="${colorFor(d.label)}" stroke-width="1"/></svg> ${d.label} (${pct} %)`;
+      // fillFor renvoie soit une couleur sanitizée, soit une référence url(#…)
+      // dont la portion variable est encodée via encodeURIComponent.
+      const raw = fillFor(d.label);
+      const fill = raw.startsWith('url(') ? raw : sanitizeColor(raw);
+      item.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:middle"><rect x="1" y="1" width="12" height="12" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1"/></svg> `;
     } else {
-      item.innerHTML = `<span class="legend-dot" style="background:${colorFor(d.label)}"></span>${d.label} (${pct} %)`;
+      item.innerHTML = `<span class="legend-dot" style="background:${stroke}"></span>`;
     }
+    item.appendChild(document.createTextNode(`${d.label} (${pct} %)`));
     legendEl.appendChild(item);
   });
 }

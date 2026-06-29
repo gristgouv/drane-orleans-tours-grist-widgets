@@ -545,6 +545,19 @@ function getPaletteColors() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// SÉCURITÉ — validation du contenu utilisateur
+// ═══════════════════════════════════════════════════════════════
+// Valide une couleur avant interpolation dans du markup / des attributs.
+// Toute valeur non reconnue est remplacée par une couleur neutre.
+function sanitizeColor(value) {
+  const s = String(value == null ? '' : value).trim();
+  if (/^#[0-9a-fA-F]{3,8}$/.test(s)) return s;
+  if (/^(rgb|rgba|hsl|hsla)\([0-9.,\s%]+\)$/i.test(s)) return s;
+  if (/^[a-zA-Z]+$/.test(s)) return s; // noms de couleur CSS (red, blue…)
+  return '#888888';
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════
 function allColumnNames(records) {
@@ -590,15 +603,24 @@ function populateSelects() {
 
   // Pivot cols
   const grid = document.getElementById('cols-grid');
+  grid.innerHTML = '';
   if (numCols.length === 0) {
-    grid.innerHTML = '<span class="cols-empty">Aucune colonne numérique disponible</span>';
+    const span = document.createElement('span');
+    span.className = 'cols-empty';
+    span.textContent = 'Aucune colonne numérique disponible';
+    grid.appendChild(span);
   } else {
-    grid.innerHTML = numCols.map(col => `
-      <label class="col-check">
-        <input type="checkbox" value="${col}" ${config.pivotCols.includes(col) ? 'checked' : ''}>
-        ${col}
-      </label>
-    `).join('');
+    numCols.forEach(col => {
+      const label = document.createElement('label');
+      label.className = 'col-check';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = col;
+      cb.checked = config.pivotCols.includes(col);
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(' ' + col));
+      grid.appendChild(label);
+    });
   }
 
   // Palette (groupées)
@@ -726,27 +748,52 @@ function refreshColorsList() {
 
   if (!multi) {
     // Couleur unique (premier élément de la palette par défaut)
-    const cur = config.colorOverrides['__single__'] || colors[0];
-    list.innerHTML = `
-      <div class="color-row">
-        <input type="color" data-cat="__single__" value="${cur}">
-        <span class="color-label">Toutes les barres</span>
-        <button type="button" data-reset="__single__">Défaut</button>
-      </div>`;
+    const cur = sanitizeColor(config.colorOverrides['__single__'] || colors[0]);
+    const row = document.createElement('div');
+    row.className = 'color-row';
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.dataset.cat = '__single__';
+    colorInput.value = cur;
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'color-label';
+    labelSpan.textContent = 'Toutes les barres';
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.dataset.reset = '__single__';
+    resetBtn.textContent = 'Défaut';
+
+    row.append(colorInput, labelSpan, resetBtn);
+    list.appendChild(row);
   } else {
     const categories = getPreviewCategories();
     if (categories.length === 0) {
       list.innerHTML = '<span class="colors-empty">Configurez d\'abord les données pour personnaliser les couleurs.</span>';
     } else {
       categories.forEach((cat, i) => {
-        const cur = config.colorOverrides[cat] || colors[i % colors.length];
+        const cur = sanitizeColor(config.colorOverrides[cat] || colors[i % colors.length]);
         const row = document.createElement('div');
         row.className = 'color-row';
-        row.innerHTML = `
-          <input type="color" data-cat="${encodeURIComponent(cat)}" value="${cur}">
-          <span class="color-label" title="${cat}">${cat || '(vide)'}</span>
-          <button type="button" data-reset="${encodeURIComponent(cat)}">Défaut</button>
-        `;
+
+        const colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.dataset.cat = encodeURIComponent(cat);
+        colorInput.value = cur;
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'color-label';
+        labelSpan.title = cat;
+        labelSpan.textContent = cat || '(vide)';
+
+        const resetBtn = document.createElement('button');
+        resetBtn.type = 'button';
+        resetBtn.dataset.reset = encodeURIComponent(cat);
+        resetBtn.textContent = 'Défaut';
+
+        row.append(colorInput, labelSpan, resetBtn);
         list.appendChild(row);
       });
     }
@@ -1014,10 +1061,21 @@ function render() {
     .on('mouseover', function (event, d) {
       const pct = total ? (d.value / total * 100).toFixed(1) : '0';
       const valueLabel = isPivot ? 'Valeur' : (config.colValue || 'Nombre');
-      let html = `<strong>${d.label}</strong><br>`;
-      html += `${valueLabel} : <strong>${d.value.toLocaleString('fr-FR')}</strong>`;
-      html += `<br>Part : <strong>${pct} %</strong>`;
-      tooltip.innerHTML = html;
+      const strong = document.createElement('strong');
+      strong.textContent = d.label;
+      const valueStrong = document.createElement('strong');
+      valueStrong.textContent = d.value.toLocaleString('fr-FR');
+      const pctStrong = document.createElement('strong');
+      pctStrong.textContent = pct + ' %';
+      tooltip.replaceChildren(
+        strong,
+        document.createElement('br'),
+        document.createTextNode(valueLabel + ' : '),
+        valueStrong,
+        document.createElement('br'),
+        document.createTextNode('Part : '),
+        pctStrong
+      );
       tooltip.classList.add('visible');
     })
     .on('mousemove', function (event) {
@@ -1052,11 +1110,16 @@ function render() {
       const item = document.createElement('span');
       item.className = 'legend-item';
       if (config.usePatterns) {
-        const fill = fillFor(d.label);
-        item.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:middle"><rect x="1" y="1" width="12" height="12" rx="2" fill="${fill}" stroke="${colorFor(d.label)}" stroke-width="1"/></svg> ${d.label}`;
+        // fillFor peut renvoyer une couleur (à valider) ou une référence url(#id)
+        // dont le label est déjà encodé via encodeURIComponent (donc sûr).
+        const rawFill = fillFor(d.label);
+        const fill = rawFill.startsWith('url(#') ? rawFill : sanitizeColor(rawFill);
+        const stroke = sanitizeColor(colorFor(d.label));
+        item.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:middle"><rect x="1" y="1" width="12" height="12" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1"/></svg> `;
       } else {
-        item.innerHTML = `<span class="legend-dot" style="background:${colorFor(d.label)}"></span>${d.label}`;
+        item.innerHTML = `<span class="legend-dot" style="background:${sanitizeColor(colorFor(d.label))}"></span>`;
       }
+      item.appendChild(document.createTextNode(d.label));
       legendEl.appendChild(item);
     });
   }

@@ -505,6 +505,19 @@ function getPaletteColors() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// SÉCURITÉ — validation du contenu utilisateur
+// ═══════════════════════════════════════════════════════════════
+// Valide une couleur avant interpolation dans du markup / des attributs.
+// Toute valeur non reconnue est remplacée par une couleur neutre.
+function sanitizeColor(value) {
+  const s = String(value == null ? '' : value).trim();
+  if (/^#[0-9a-fA-F]{3,8}$/.test(s)) return s;
+  if (/^(rgb|rgba|hsl|hsla)\([0-9.,\s%]+\)$/i.test(s)) return s;
+  if (/^[a-zA-Z]+$/.test(s)) return s; // noms de couleur CSS (red, blue…)
+  return '#888888';
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════
 function allColumnNames(records) {
@@ -551,15 +564,24 @@ function populateSelects() {
 
   // Axes (colonnes numériques cochables)
   const grid = document.getElementById('axis-grid');
+  grid.innerHTML = '';
   if (numCols.length === 0) {
-    grid.innerHTML = '<span class="cols-empty">Aucune colonne numérique disponible</span>';
+    const span = document.createElement('span');
+    span.className = 'cols-empty';
+    span.textContent = 'Aucune colonne numérique disponible';
+    grid.appendChild(span);
   } else {
-    grid.innerHTML = numCols.map(col => `
-      <label class="col-check">
-        <input type="checkbox" value="${col}" ${config.axisCols.includes(col) ? 'checked' : ''}>
-        ${col}
-      </label>
-    `).join('');
+    numCols.forEach(col => {
+      const label = document.createElement('label');
+      label.className = 'col-check';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = col;
+      cb.checked = config.axisCols.includes(col);
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(' ' + col));
+      grid.appendChild(label);
+    });
   }
 
   // Label series
@@ -638,14 +660,26 @@ function refreshColorsList() {
   }
 
   displayLabels.forEach((cat, i) => {
-    const cur = config.colorOverrides[cat] || colors[i % colors.length];
+    const cur = sanitizeColor(config.colorOverrides[cat] || colors[i % colors.length]);
     const row = document.createElement('div');
     row.className = 'color-row';
-    row.innerHTML = `
-      <input type="color" data-cat="${encodeURIComponent(cat)}" value="${cur}">
-      <span class="color-label" title="${cat}">${cat}</span>
-      <button type="button" data-reset="${encodeURIComponent(cat)}">Défaut</button>
-    `;
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.dataset.cat = encodeURIComponent(cat);
+    colorInput.value = cur;
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'color-label';
+    labelSpan.title = cat;
+    labelSpan.textContent = cat;
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.dataset.reset = encodeURIComponent(cat);
+    resetBtn.textContent = 'Défaut';
+
+    row.append(colorInput, labelSpan, resetBtn);
     list.appendChild(row);
   });
 
@@ -844,12 +878,19 @@ function render() {
       .attr('stroke-dasharray', dash || null)
       .on('mouseover', function () {
         d3.select(this).attr('fill-opacity', Math.min(1, config.fillOpacity + 0.25));
-        let html = `<strong>${s.label}</strong><table>`;
+        const strong = document.createElement('strong');
+        strong.textContent = s.label;
+        const table = document.createElement('table');
         config.axisCols.forEach((col, i) => {
-          html += `<tr><td>${col}</td><td>${s.values[i].toLocaleString('fr-FR')}</td></tr>`;
+          const tr = document.createElement('tr');
+          const tdName = document.createElement('td');
+          tdName.textContent = col;
+          const tdVal = document.createElement('td');
+          tdVal.textContent = s.values[i].toLocaleString('fr-FR');
+          tr.append(tdName, tdVal);
+          table.appendChild(tr);
         });
-        html += '</table>';
-        tooltip.innerHTML = html;
+        tooltip.replaceChildren(strong, table);
         tooltip.classList.add('visible');
       })
       .on('mousemove', function (event) {
@@ -883,16 +924,17 @@ function render() {
     series.forEach((s, idx) => {
       const item = document.createElement('span');
       item.className = 'legend-item' + (hiddenSeries.has(s.label) ? ' muted' : '');
-      const color = colorFor(s.label, idx);
+      const color = sanitizeColor(colorFor(s.label, idx));
       const dash  = strokeDashFor(idx);
       if (config.useStrokes && dash) {
-        item.innerHTML = `<svg width="22" height="10" viewBox="0 0 22 10" style="vertical-align:middle"><line x1="1" y1="5" x2="21" y2="5" stroke="${color}" stroke-width="2.5" stroke-dasharray="${dash}"/></svg>${s.label}`;
+        item.innerHTML = `<svg width="22" height="10" viewBox="0 0 22 10" style="vertical-align:middle"><line x1="1" y1="5" x2="21" y2="5" stroke="${color}" stroke-width="2.5" stroke-dasharray="${dash}"/></svg>`;
       } else if (config.useShapes) {
         const sym = d3.symbol().type(symbolFor(idx)).size(64);
-        item.innerHTML = `<svg width="14" height="14" viewBox="-8 -8 16 16" style="vertical-align:middle"><path d="${sym()}" fill="${color}"/></svg>${s.label}`;
+        item.innerHTML = `<svg width="14" height="14" viewBox="-8 -8 16 16" style="vertical-align:middle"><path d="${sym()}" fill="${color}"/></svg>`;
       } else {
-        item.innerHTML = `<span class="legend-dot" style="background:${color}"></span>${s.label}`;
+        item.innerHTML = `<span class="legend-dot" style="background:${color}"></span>`;
       }
+      item.appendChild(document.createTextNode(s.label));
       item.addEventListener('click', () => {
         if (hiddenSeries.has(s.label)) hiddenSeries.delete(s.label);
         else hiddenSeries.add(s.label);
