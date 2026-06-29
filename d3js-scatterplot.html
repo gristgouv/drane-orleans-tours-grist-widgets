@@ -454,6 +454,19 @@ function getCurrentCategories() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// SÉCURITÉ — validation du contenu utilisateur
+// ═══════════════════════════════════════════════════════════════
+// Valide une couleur avant interpolation dans du markup / des attributs.
+// Toute valeur non reconnue est remplacée par une couleur neutre.
+function sanitizeColor(value) {
+  const s = String(value == null ? '' : value).trim();
+  if (/^#[0-9a-fA-F]{3,8}$/.test(s)) return s;
+  if (/^(rgb|rgba|hsl|hsla)\([0-9.,\s%]+\)$/i.test(s)) return s;
+  if (/^[a-zA-Z]+$/.test(s)) return s; // noms de couleur CSS (red, blue…)
+  return '#888888';
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════
 function numericColumns(records) {
@@ -547,25 +560,53 @@ function refreshColorsList() {
 
   if (!colCategory) {
     // Pas de colonne catégorie → une couleur unique (1er élément de la palette)
-    const cur = config.colorOverrides['__single__'] || colors[0];
-    list.innerHTML = `
-      <div class="color-row">
-        <input type="color" data-cat="__single__" value="${cur}">
-        <span class="color-label">Tous les points</span>
-        <button type="button" data-reset="__single__">Défaut</button>
-      </div>`;
+    const cur = sanitizeColor(config.colorOverrides['__single__'] || colors[0]);
+    const row = document.createElement('div');
+    row.className = 'color-row';
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.dataset.cat = '__single__';
+    colorInput.value = cur;
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'color-label';
+    labelSpan.textContent = 'Tous les points';
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.dataset.reset = '__single__';
+    resetBtn.textContent = 'Défaut';
+
+    row.append(colorInput, labelSpan, resetBtn);
+    list.appendChild(row);
   } else if (categories.length === 0) {
-    list.innerHTML = '<span class="colors-empty">Aucune donnée disponible pour cette colonne.</span>';
+    const span = document.createElement('span');
+    span.className = 'colors-empty';
+    span.textContent = 'Aucune donnée disponible pour cette colonne.';
+    list.appendChild(span);
   } else {
     categories.forEach((cat, i) => {
-      const cur = config.colorOverrides[cat] || colors[i % colors.length];
+      const cur = sanitizeColor(config.colorOverrides[cat] || colors[i % colors.length]);
       const row = document.createElement('div');
       row.className = 'color-row';
-      row.innerHTML = `
-        <input type="color" data-cat="${encodeURIComponent(cat)}" value="${cur}">
-        <span class="color-label" title="${cat}">${cat || '(vide)'}</span>
-        <button type="button" data-reset="${encodeURIComponent(cat)}">Défaut</button>
-      `;
+
+      const colorInput = document.createElement('input');
+      colorInput.type = 'color';
+      colorInput.dataset.cat = encodeURIComponent(cat);
+      colorInput.value = cur;
+
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'color-label';
+      labelSpan.title = cat;
+      labelSpan.textContent = cat || '(vide)';
+
+      const resetBtn = document.createElement('button');
+      resetBtn.type = 'button';
+      resetBtn.dataset.reset = encodeURIComponent(cat);
+      resetBtn.textContent = 'Défaut';
+
+      row.append(colorInput, labelSpan, resetBtn);
       list.appendChild(row);
     });
   }
@@ -738,12 +779,22 @@ function render() {
       d3.select(this)
         .attr('opacity', 1)
         .attr('d', hoverSymbol.type(symbolFor(d.color))());
-      let html = '';
-      if (d.label) html += `<strong>${d.label}</strong><br>`;
-      html += `${config.colX}: <strong>${d.x}</strong><br>`;
-      html += `${config.colY}: <strong>${d.y}</strong>`;
-      if (config.colColor && d.color) html += `<br>${config.colColor}: ${d.color}`;
-      tooltip.innerHTML = html;
+      const nodes = [];
+      if (d.label) {
+        const labelStrong = document.createElement('strong');
+        labelStrong.textContent = d.label;
+        nodes.push(labelStrong, document.createElement('br'));
+      }
+      const xStrong = document.createElement('strong');
+      xStrong.textContent = d.x;
+      nodes.push(document.createTextNode(config.colX + ': '), xStrong, document.createElement('br'));
+      const yStrong = document.createElement('strong');
+      yStrong.textContent = d.y;
+      nodes.push(document.createTextNode(config.colY + ': '), yStrong);
+      if (config.colColor && d.color) {
+        nodes.push(document.createElement('br'), document.createTextNode(config.colColor + ': ' + d.color));
+      }
+      tooltip.replaceChildren(...nodes);
       tooltip.classList.add('visible');
     })
     .on('mousemove', function (event) {
@@ -763,12 +814,14 @@ function render() {
     categories.forEach(cat => {
       const item = document.createElement('span');
       item.className = 'legend-item';
+      const color = sanitizeColor(colorFor(cat));
       if (config.useShapes) {
         const path = legendSymbol.type(symbolFor(cat))();
-        item.innerHTML = `<svg width="14" height="14" viewBox="-8 -8 16 16" style="vertical-align:middle"><path d="${path}" fill="${colorFor(cat)}"/></svg> ${cat || '(vide)'}`;
+        item.innerHTML = `<svg width="14" height="14" viewBox="-8 -8 16 16" style="vertical-align:middle"><path d="${path}" fill="${color}"/></svg> `;
       } else {
-        item.innerHTML = `<span class="legend-dot" style="background:${colorFor(cat)}"></span>${cat || '(vide)'}`;
+        item.innerHTML = `<span class="legend-dot" style="background:${color}"></span>`;
       }
+      item.appendChild(document.createTextNode(cat || '(vide)'));
       legendEl.appendChild(item);
     });
   }
