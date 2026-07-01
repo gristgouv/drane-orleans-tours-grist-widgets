@@ -3,6 +3,7 @@ pages:
   script:
     - mkdir public
     - cp *.html public/        # copie tous tes .html
+    - cp *.js public/          # copie les scripts partagés (ex. d3js-common.js)
   artifacts:
     paths:
       - public
