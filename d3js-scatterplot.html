@@ -6,6 +6,7 @@
   <title>Scatterplot D3.js</title>
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
   <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="d3js-common.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -416,71 +417,11 @@ let config = {
   useShapes: false,     // formes différentes par catégorie (accessibilité daltoniens)
 };
 
-// Palettes standards + palettes adaptées aux daltoniens (Okabe-Ito, Tol, Dark2)
-const PALETTES = {
-  // Standards
-  'Tableau10':  d3.schemeTableau10,
-  'Category10': d3.schemeCategory10,
-  'Set1':       d3.schemeSet1,
-  'Set2':       d3.schemeSet2,
-  'Set3':       d3.schemeSet3,
-  'Paired':     d3.schemePaired,
-  'Pastel1':    d3.schemePastel1,
-  'Pastel2':    d3.schemePastel2,
-  'Accent':     d3.schemeAccent,
-  // Accessibles (daltoniens)
-  'Okabe-Ito':  ['#E69F00','#56B4E9','#009E73','#F0E442','#0072B2','#D55E00','#CC79A7','#000000'],
-  'Tol Bright': ['#4477AA','#EE6677','#228833','#CCBB44','#66CCEE','#AA3377','#BBBBBB'],
-  'Tol Muted':  ['#CC6677','#332288','#DDCC77','#117733','#88CCEE','#882255','#44AA99','#999933','#AA4499','#DDDDDD'],
-  'Tol Light':  ['#77AADD','#EE8866','#EEDD88','#FFAABB','#99DDFF','#44BB99','#BBCC33','#AAAA00','#DDDDDD'],
-  'Dark2':      d3.schemeDark2,
-};
-const CB_SAFE = new Set(['Okabe-Ito','Tol Bright','Tol Muted','Tol Light','Dark2']);
-
-// Symboles D3 utilisés quand "Formes par catégorie" est activé
-const SYMBOLS = [
-  d3.symbolCircle, d3.symbolSquare, d3.symbolTriangle, d3.symbolDiamond,
-  d3.symbolCross,  d3.symbolStar,   d3.symbolWye,
-];
 const margin = { top: 20, right: 20, bottom: 50, left: 60 };
-
-function getPaletteColors() {
-  return PALETTES[config.palette] || PALETTES['Tableau10'];
-}
 
 function getCurrentCategories() {
   if (!config.colColor || allRecords.length === 0) return [''];
   return [...new Set(allRecords.map(r => String(r[config.colColor] ?? '')))].sort();
-}
-
-// ═══════════════════════════════════════════════════════════════
-// SÉCURITÉ — validation du contenu utilisateur
-// ═══════════════════════════════════════════════════════════════
-// Valide une couleur avant interpolation dans du markup / des attributs.
-// Toute valeur non reconnue est remplacée par une couleur neutre.
-function sanitizeColor(value) {
-  const s = String(value == null ? '' : value).trim();
-  if (/^#[0-9a-fA-F]{3,8}$/.test(s)) return s;
-  if (/^(rgb|rgba|hsl|hsla)\([0-9.,\s%]+\)$/i.test(s)) return s;
-  if (/^[a-zA-Z]+$/.test(s)) return s; // noms de couleur CSS (red, blue…)
-  return '#888888';
-}
-
-// ═══════════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════════
-function numericColumns(records) {
-  if (!records.length) return [];
-  const sample = records[0];
-  return Object.keys(sample).filter(k => {
-    if (k === 'id' || k === 'manualSort') return false;
-    return records.some(r => typeof r[k] === 'number' && isFinite(r[k]));
-  });
-}
-
-function allColumnNames(records) {
-  if (!records.length) return [];
-  return Object.keys(records[0]).filter(k => k !== 'id' && k !== 'manualSort');
 }
 
 function populateSelects() {
@@ -513,21 +454,7 @@ function populateSelects() {
   });
 
   // Palette (groupées standards / daltoniens)
-  const selPal = document.getElementById('sel-palette');
-  selPal.innerHTML = '';
-  const grpStd = document.createElement('optgroup');
-  grpStd.label = 'Standard';
-  const grpCb  = document.createElement('optgroup');
-  grpCb.label  = 'Accessible (daltoniens)';
-  Object.keys(PALETTES).forEach(name => {
-    const opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name;
-    (CB_SAFE.has(name) ? grpCb : grpStd).appendChild(opt);
-  });
-  selPal.appendChild(grpStd);
-  selPal.appendChild(grpCb);
-  selPal.value = config.palette;
+  populatePaletteSelect(document.getElementById('sel-palette'), config.palette);
 
   // Formes par catégorie (daltoniens)
   document.getElementById('inp-useshapes').checked = !!config.useShapes;
