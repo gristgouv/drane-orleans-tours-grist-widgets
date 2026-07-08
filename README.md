@@ -118,5 +118,5 @@ Résultat : un visiteur anonyme ne peut **rien lire** dans le document, et peut 
 
 ## Crédits
 
-Développé pour la DRANE d'Orléans-Tours.
+Développé pour la DRANE d'Orléans-Tours avec l'appui de Claude Opus 4.8.
 S'appuie sur l'API plugin Grist ([docs.getgrist.com/grist-plugin-api.js](https://docs.getgrist.com/grist-plugin-api.js)) et sur les conventions de soumission de formulaires de [`gristlabs/grist-form-submit`](https://github.com/gristlabs/grist-form-submit).
